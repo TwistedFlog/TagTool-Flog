@@ -33,6 +33,9 @@ namespace TagTool.Commands.Porting
         public Stream DestStream;
         public PortingFlags Flags = PortingFlags.Default;
 
+        // Add this declaration to store ported string IDs
+        public Dictionary<int, StringId> PortedStringIds = new Dictionary<int, StringId>();
+
         public Dictionary<int, CachedTag> ConvertedTags = new Dictionary<int, CachedTag>();
         public Dictionary<ResourceLocation, Dictionary<int, PageableResource>> ConvertedResources = new Dictionary<ResourceLocation, Dictionary<int, PageableResource>>();
 
@@ -71,6 +74,37 @@ namespace TagTool.Commands.Porting
             return true;
         }
 
+        // Add the ConvertStringId method similar to PortTagCommand
+        private StringId ConvertStringId(StringId stringId)
+        {
+            // Check if the stringId is invalid, return it immediately
+            if (stringId == StringId.Invalid)
+                return stringId;
+
+            // Attempt to get the ported StringId from the dictionary
+            if (PortedStringIds.TryGetValue((int)stringId.Value, out StringId portedId))
+                return portedId;  // Return the existing ported StringId if found
+
+            // Get the string from the source cache's StringTable
+            var value = SrcCache.StringTable.GetString(stringId);
+
+            // Try to get the StringId in the destination cache
+            var destStringId = DestCache.StringTable.GetStringId(value);
+
+            // If not found, add the string to the destination cache's StringTable
+            if (destStringId == StringId.Invalid || !DestCache.StringTable.Contains(value))
+            {
+                // Add the new string to the destination StringTable and store it in the dictionary
+                portedId = DestCache.StringTable.AddString(value);
+                PortedStringIds[(int)stringId.Value] = portedId;  // Store the newly ported StringId
+                return portedId;  // Return the newly added StringId
+            }
+
+            // If found, store the existing StringId in the dictionary
+            PortedStringIds[(int)stringId.Value] = destStringId;
+            return destStringId;  // Return the existing StringId from the destination cache
+        }
+
         public bool ParsePortingFlags(List<string> args, out PortingFlags outFlags)
         {
             outFlags = PortingFlags.Default;
@@ -104,6 +138,8 @@ namespace TagTool.Commands.Porting
         {
             switch (tagData)
             {
+                case StringId stringId:
+                    return ConvertStringId(stringId);
                 case PageableResource pageable:
                     return ConvertResource(pageable);
                 case byte[] _:
