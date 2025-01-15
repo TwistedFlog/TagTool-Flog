@@ -119,7 +119,7 @@ namespace TagTool.Commands.RenderModels
             // Map original materials
             foreach (var material in Definition.Materials)
             {
-                var shaderTag = Cache.TagCache.GetTag(material.RenderMethod.Index); // Ensure 'Index' is the correct property
+                var shaderTag = material.RenderMethod != null ? Cache.TagCache.GetTag(material.RenderMethod.Index) : null; // Ensure 'Index' is the correct property
                 if (shaderTag != null)
                 {
                     var shaderPath = shaderTag.Name;
@@ -132,8 +132,8 @@ namespace TagTool.Commands.RenderModels
                 }
                 else
                 {
-                    Console.ForegroundColor = ConsoleColor.Cyan;
-                    Console.WriteLine($"Warning: Shader tag for material {material} not found.");
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine($"Warning: One of the shaders was is invalid or does not exist");
                     Console.ResetColor();
                 }
             }
