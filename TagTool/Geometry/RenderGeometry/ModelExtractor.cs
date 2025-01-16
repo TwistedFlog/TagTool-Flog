@@ -582,13 +582,14 @@ namespace TagTool.Geometry
         public void PopulateAssimpScene(string[] variantName = null)
         {
 
+            // Initialize the scene root node
             Scene.RootNode = new Node(CacheContext.StringTable.GetString(RenderModel.Name));
             
             // set Z as up
             Scene.RootNode.Transform = new Matrix4x4(
                 1, 0, 0, 0,
                 0, 0, 1, 0,
-                0,-1, 0, 0,
+                0, -1, 0, 0,
                 0, 0, 0, 1);
 
             // Pass 1 create bones and assimp nodes as enumerated in render model nodes
@@ -624,6 +625,10 @@ namespace TagTool.Geometry
                 }
             }
 
+            // Dictionary to map material names to Material objects
+            var materialNameMap = new Dictionary<string, Material>();
+
+            // Iterate over regions and permutations to create nodes and meshes
             foreach (var region in RenderModel.Regions)
             {
                 var regionName = CacheContext.StringTable.GetString(region.Name);
@@ -639,7 +644,6 @@ namespace TagTool.Geometry
 
                         for (int i = 0; i < permutation.MeshCount; i++)
                         {
-                            var meshName = $"mesh_{i}";
                             var meshIndex = i + permutation.MeshIndex;
 
                             if (!(meshIndex < RenderModel.Geometry.Meshes.Count))
@@ -652,8 +656,8 @@ namespace TagTool.Geometry
 
                             for (int j = 0; j < mesh.Parts.Count; j++)
                             {
-                                var partName = $"part_{j}";
-                                int absSubMeshIndex = GetAbsoluteIndexSubMesh(meshIndex) + j;
+                                var part = mesh.Parts[j];
+                                var absSubMeshIndex = GetAbsoluteIndexSubMesh(meshIndex) + j;
                                 int sceneMeshIndex;
 
                                 if (!MeshMapping.ContainsKey(absSubMeshIndex))
@@ -665,65 +669,55 @@ namespace TagTool.Geometry
                                 {
                                     MeshMapping.TryGetValue(absSubMeshIndex, out sceneMeshIndex);
                                 }
-                                Node node = new Node
+                                var node = new Node
                                 {
-                                    Name = $"{regionName}:{permutationName}:{meshName}:{partName}"
+                                    Name = $"{regionName}:{permutationName}:mesh_{i}:part_{j}"
                                 };
                                 node.MeshIndices.Add(sceneMeshIndex);
                                 Scene.RootNode.Children.Add(node);
+
+                                // Ensure the material name is unique
+                                var materialName = DecoratorBitmap != null ? DecoratorBitmap : RenderModel.Materials[part.MaterialIndex].RenderMethod.Name;
+                                materialName = Path.GetFileName(materialName);
+
+                                if (!materialNameMap.ContainsKey(materialName))
+                                {
+                                    var material = new Material
+                                    {
+                                        Name = materialName
+                                    };
+
+                                    RenderMethod renderMethod;
+                                    using (var cacheStream = CacheContext.OpenCacheRead())
+                                        renderMethod = CacheContext.Deserialize<RenderMethod>(cacheStream, RenderModel.Materials[part.MaterialIndex].RenderMethod);
+
+                                    if (renderMethod.ShaderProperties.Count > 0)
+                                    {
+                                        var prop = renderMethod.ShaderProperties[0];
+                                        if (prop.TextureConstants.Count > 0)
+                                        {
+                                            var baseMapTexture = prop.TextureConstants[0];
+
+                                            var baseMapTS = new TextureSlot
+                                            {
+                                                FilePath = (DecoratorBitmap != null ? DecoratorBitmap : baseMapTexture.Bitmap.Name) + ".dds",
+                                                TextureType = TextureType.Diffuse,
+                                                WrapModeU = baseMapTexture.SamplerAddressMode.AddressU.ToString() == "Clamp" ? TextureWrapMode.Clamp : baseMapTexture.SamplerAddressMode.AddressU.ToString() == "Mirror" ? TextureWrapMode.Mirror : TextureWrapMode.Wrap,
+                                                WrapModeV = baseMapTexture.SamplerAddressMode.AddressV.ToString() == "Clamp" ? TextureWrapMode.Clamp : baseMapTexture.SamplerAddressMode.AddressV.ToString() == "Mirror" ? TextureWrapMode.Mirror : TextureWrapMode.Wrap
+                                            };
+                                            material.AddMaterialTexture(ref baseMapTS);
+                                        }
+                                    }
+
+                                    materialNameMap[materialName] = material;
+                                    Scene.Materials.Add(material);
+                                }
+
+                                Scene.Meshes[sceneMeshIndex].MaterialIndex = Scene.Materials.IndexOf(materialNameMap[materialName]);
                             }
                         }
                     }
                 }
-            }
-
-
-            for (int i = 0; i < RenderModel.Materials.Count(); i++)
-            {
-                var rmMaterial = RenderModel.Materials[i];
-                materialName = Path.GetFileName(materialName);
-
-                var material = new Material
-                {
-                    Name = materialName
-                };
-
-                RenderMethod renderMethod;
-                using (var cacheStream = CacheContext.OpenCacheRead())
-                    renderMethod = CacheContext.Deserialize<RenderMethod>(cacheStream, rmMaterial.RenderMethod);
-
-                foreach (var prop in renderMethod.ShaderProperties)
-                {
-                    RenderMethodTemplate template;
-                    using (var cacheStream = CacheContext.OpenCacheRead())
-                        template = CacheContext.Deserialize<RenderMethodTemplate>(cacheStream, prop.Template);
-
-                    var baseMapStringId = CacheContext.StringTable.GetStringId("base_map");
-                    var baseMapIndex = template.TextureParameterNames.FindIndex(x => x.Name == baseMapStringId);
-
-                    if (baseMapIndex == -1)
-                    {
-                        Scene.Materials.Add(material);
-                        continue;
-                    }
-
-                    var baseMapTexture = prop.TextureConstants[baseMapIndex];
-
-                    var baseMapTS = new TextureSlot();
-                    baseMapTS.FilePath = (DecoratorBitmap != null ? DecoratorBitmap : baseMapTexture.Bitmap.Name) + ".dds";
-                    baseMapTS.TextureType = TextureType.Diffuse;
-                    baseMapTS.WrapModeU =
-                        baseMapTexture.SamplerAddressMode.AddressU.ToString() == "Clamp" ? TextureWrapMode.Clamp :
-                        baseMapTexture.SamplerAddressMode.AddressU.ToString() == "Mirror" ? TextureWrapMode.Mirror :
-                        TextureWrapMode.Wrap;
-                    baseMapTS.WrapModeV =
-                        baseMapTexture.SamplerAddressMode.AddressV.ToString() == "Clamp" ? TextureWrapMode.Clamp :
-                        baseMapTexture.SamplerAddressMode.AddressV.ToString() == "Mirror" ? TextureWrapMode.Mirror :
-                        TextureWrapMode.Wrap;
-                    material.AddMaterialTexture(ref baseMapTS);
-                }
-
-                Scene.Materials.Add(material);
             }
         }
 
@@ -897,6 +891,7 @@ namespace TagTool.Geometry
             List<Face> faces = new List<Face>();
             for (int i = 0; i < indices.Length; i += 3)
             {
+                if (i + 2 >= indices.Length) break; // Ensure that we do not access out of bounds
                 var a = indices[i] - vertexOffset;
                 var b = indices[i + 1] - vertexOffset;
                 var c = indices[i + 2] - vertexOffset;
