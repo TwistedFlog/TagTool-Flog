@@ -681,10 +681,11 @@ namespace TagTool.Geometry
             for (int i = 0; i < RenderModel.Materials.Count(); i++)
             {
                 var rmMaterial = RenderModel.Materials[i];
+                materialName = Path.GetFileName(materialName);
 
                 var material = new Material
                 {
-                    Name = DecoratorBitmap != null ? DecoratorBitmap : rmMaterial.RenderMethod.Name
+                    Name = materialName
                 };
 
                 RenderMethod renderMethod;
