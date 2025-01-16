@@ -14,7 +14,7 @@ namespace TagTool.Tags.Definitions
     [TagStructure(Name = "scenario", Tag = "scnr", Size = 0x7B8, MaxVersion = CacheVersion.Halo3Retail, Platform = CachePlatform.Original)]
     [TagStructure(Name = "scenario", Tag = "scnr", Size = 0x780, MaxVersion = CacheVersion.Halo3Retail, Platform = CachePlatform.MCC)]
     [TagStructure(Name = "scenario", Tag = "scnr", Size = 0x834, MaxVersion = CacheVersion.Halo3ODST, Platform = CachePlatform.Original)]
-    [TagStructure(Name = "scenario", Tag = "scnr", Size = 0x800, MaxVersion = CacheVersion.Halo3ODST, Platform = CachePlatform.MCC)]
+    [TagStructure(Name = "scenario", Tag = "scnr", Size = 0x7FC, MaxVersion = CacheVersion.Halo3ODST, Platform = CachePlatform.MCC)]
     [TagStructure(Name = "scenario", Tag = "scnr", Size = 0x824, MinVersion = CacheVersion.HaloOnlineED, MaxVersion = CacheVersion.HaloOnline449175)]
     //[TagStructure(Name = "scenario", Tag = "scnr", Size = 0x834, MinVersion = CacheVersion.HaloOnline498295)]
     [TagStructure(Name = "scenario", Tag = "scnr", Size = 0x834, MinVersion = CacheVersion.HaloOnline498295, MaxVersion = CacheVersion.HaloOnline700123)]
@@ -424,9 +424,6 @@ namespace TagTool.Tags.Definitions
         [TagField(Version = CacheVersion.Halo3ODST, Platform = CachePlatform.MCC)]
         public List<TagReferenceBlock> BudgetReferencesODSTMCC;
 
-        [TagField(Version = CacheVersion.Halo3Retail, Platform = CachePlatform.MCC)]
-        public List<NullBlock> ScavengerHuntObjectsH3;
-
         [TagField(ValidTags = new[] { "effe" }, MinVersion = CacheVersion.Halo3ODST, MaxVersion = CacheVersion.HaloOnline700123)]
         public CachedTag MissionVisionModeEffect;
         [TagField(ValidTags = new[] { "effe" }, MinVersion = CacheVersion.Halo3ODST, MaxVersion = CacheVersion.HaloOnline700123)]
@@ -454,10 +451,10 @@ namespace TagTool.Tags.Definitions
         public CachedTag VariantGlobals;
 
         [TagField(MinVersion = CacheVersion.Halo3ODST, Platform = CachePlatform.MCC)]
-        public List<NullBlock> StructuredBufferInterops;
+        public List<StructuredBufferInterop> StructuredBufferInterops;
 
-        [TagField(MinVersion = CacheVersion.Halo3ODST, Platform = CachePlatform.MCC)]
-        public List<NullBlock> ScavengerHuntObjectsODST;
+        [TagField(MinVersion = CacheVersion.Halo3Retail, Platform = CachePlatform.MCC)]
+        public List<ScavengerHuntObject> ScavengerHuntObjects;
 
         [Flags]
         public enum BspFlags : int
@@ -1005,7 +1002,7 @@ namespace TagTool.Tags.Definitions
         }
 
         [TagStructure(Size = 0x24, MaxVersion = CacheVersion.HaloOnline700123, Platform = CachePlatform.Original)]
-        [TagStructure(Size = 0x28, MaxVersion = CacheVersion.Halo3Retail, Platform = CachePlatform.MCC)]
+        [TagStructure(Size = 0x28, MaxVersion = CacheVersion.Halo3ODST, Platform = CachePlatform.MCC)]
         [TagStructure(Size = 0x13C, MinVersion = CacheVersion.HaloReach)]
         public class ZoneSet : TagStructure
 		{
@@ -1251,6 +1248,7 @@ namespace TagTool.Tags.Definitions
 
             public enum ObjectLocationPlacementFlagsMCC : uint
             {
+                None = 0,
                 NotAutomatically = 1 << 0,
                 LockTypeToEnvObject = 1 << 1,
                 LockTransformToEnvObject = 1 << 2,
@@ -1630,7 +1628,7 @@ namespace TagTool.Tags.Definitions
         }
 
         [TagStructure(Size = 0x1C, MaxVersion = CacheVersion.Halo3Retail, Platform = CachePlatform.Original)]
-        [TagStructure(Size = 0x34, MaxVersion = CacheVersion.Halo3Retail, Platform = CachePlatform.MCC)]
+        [TagStructure(Size = 0x34, MaxVersion = CacheVersion.Halo3ODST, Platform = CachePlatform.MCC)]
         [TagStructure(Size = 0x34, MaxVersion = CacheVersion.Halo3ODST, Platform = CachePlatform.Original)]
         [TagStructure(Size = 0x38, MinVersion = CacheVersion.HaloOnlineED, MaxVersion = CacheVersion.HaloOnline700123, Platform = CachePlatform.Original)]
         [TagStructure(Size = 0x8C, MinVersion = CacheVersion.HaloReach, Platform = CachePlatform.Original)]
@@ -5783,5 +5781,24 @@ namespace TagTool.Tags.Definitions
         public short NameIndex = -1;
         public StringId ParentMarker;
         public StringId ConnectionMarker;
+    }
+
+    [TagStructure(Size = 0x8)]
+    public class StructuredBufferInterop : TagStructure 
+    {
+        public DatumHandle StructuredBufferInteropAssetDatum;
+
+        [TagField(Length = 0x4, Flags = TagFieldFlags.Padding)]
+        public byte[] Padding;
+    }
+
+    [TagStructure(Size = 0x24)]
+    public class ScavengerHuntObject : TagStructure 
+    {
+        [TagField(Length = 0x20)]
+        public string ExportedName;
+
+        public short NameIndex;
+        public short Unknown; // Might be padding?
     }
 }
