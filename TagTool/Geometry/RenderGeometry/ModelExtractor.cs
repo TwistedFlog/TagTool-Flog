@@ -823,6 +823,14 @@ namespace TagTool.Geometry
                 if (vertex.Binormals != null)
                     mesh.BiTangents.Add(vertex.Binormals);
 
+                // Handle rigid type meshes by assigning them to their correct bone
+                if (geometryMesh.Type == VertexType.Rigid)
+                {
+                    var rigidNodeIndex = geometryMesh.RigidNodeIndex;
+                    var bone = mesh.Bones[rigidNodeIndex];
+                    bone.VertexWeights.Add(new VertexWeight(i - vertexOffset, 1.0f));  // Assign full weight to the correct bone
+                }
+
                 if (vertex.Indices != null)
                 {
                     for (int j = 0; j < vertex.Indices.Length; j++)
@@ -832,8 +840,11 @@ namespace TagTool.Geometry
                             index = RenderModel.Geometry.PerMeshNodeMaps[meshIndex].NodeIndices[index].Node;
 
                         var bone = mesh.Bones[index];
-                        
-                        bone.VertexWeights.Add(new VertexWeight(i - vertexOffset, vertex.Weights[j]));
+
+                        if (vertex.Weights[j] > 0)
+                        {
+                            bone.VertexWeights.Add(new VertexWeight(i - vertexOffset, vertex.Weights[j]));
+                        }
                     }
                 }
                 // Add skinned mesh support and more
