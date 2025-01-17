@@ -370,37 +370,52 @@ namespace TagTool.Geometry
 
                             if (mesh.Type == VertexType.Rigid)
                             {
-                                var indices = vert.Indices is null ? new List<int>() { 0 }
-                                    : vert.Indices.Distinct().Where(x => x != 0).Select(v => (int)v).ToList();
-
-                                foreach (int index in indices) amfWriter.Write((byte)index);
-
-                                if (indices.Count < 4) amfWriter.Write(byte.MaxValue);
+                                int rigidNodeIndex = mesh.RigidNodeIndex;
+                                amfWriter.Write((byte)(rigidNodeIndex >= 0 && rigidNodeIndex < RenderModel.Nodes.Count ? rigidNodeIndex : 0));
+                                amfWriter.Write(byte.MaxValue);  // Padding
                             }
                             else if (mesh.Type == VertexType.Skinned)
                             {
-                                var indices = vert.Indices.AsEnumerable().ToArray();
-                                var weights = vert.Weights.AsEnumerable().ToArray();
-
-                                var count = weights.Count(w => w > 0);
-                                if (count == 0)
+                                if (RenderModel.Geometry.PerMeshNodeMaps.Count > perm.MeshIndex)
                                 {
-                                    amfWriter.Write((byte)0);
-                                    amfWriter.Write((byte)255);
-                                    amfWriter.Write(0);
-                                    continue;
+                                    // Logic for meshes with node maps
+                                    var nodeMap = RenderModel.Geometry.PerMeshNodeMaps[perm.MeshIndex];
+                                    for (int i = 0; i < 4; i++)
+                                    {
+                                        int nodeIndex = i < vert.Indices.Length ? nodeMap.NodeIndices[vert.Indices[i]].Node : 0;
+                                        amfWriter.Write((byte)(nodeIndex >= 0 && nodeIndex < RenderModel.Nodes.Count ? nodeIndex : 0));
+                                    }
+                                    if (vert.Weights.Length < 4)
+                                        amfWriter.Write(byte.MaxValue);
+                                    foreach (var weight in vert.Weights.Take(4))
+                                        amfWriter.Write(weight);
                                 }
-
-                                for (int i = 0; i < 4; i++)
+                                else
                                 {
-                                    if (weights[i] > 0)
-                                        amfWriter.Write((byte)indices[i]);
+                                    // Logic for meshes without node maps
+                                    var indices = vert.Indices.AsEnumerable().ToArray();
+                                    var weights = vert.Weights.AsEnumerable().ToArray();
+
+                                    var count = weights.Count(w => w > 0);
+                                    if (count == 0)
+                                    {
+                                        amfWriter.Write((byte)0);
+                                        amfWriter.Write((byte)255);
+                                        amfWriter.Write(0);
+                                        continue;
+                                    }
+
+                                    for (int i = 0; i < 4; i++)
+                                    {
+                                        if (weights[i] > 0)
+                                            amfWriter.Write((byte)indices[i]);
+                                    }
+
+                                    if (count != 4) amfWriter.Write(byte.MaxValue);
+
+                                    foreach (var w in weights.Where(w => w > 0))
+                                        amfWriter.Write(w);
                                 }
-
-                                if (count != 4) amfWriter.Write(byte.MaxValue);
-
-                                foreach (var w in weights.Where(w => w > 0))
-                                    amfWriter.Write(w);
                             }
                         }
                     }
