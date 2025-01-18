@@ -445,12 +445,15 @@ namespace TagTool.Geometry
                         {
                             var indices = ReadIndices(reader, part);
 
+                            if (indices.Length < 3)
+                            {
+                                Console.WriteLine($"Skipping sub-part with insufficient indices: {indices.Length}");
+                                continue;
+                            }
+
                             foreach (var index in indices)
                             {
-                                if (reader.Mesh.ResourceVertexBuffers.Count() > ushort.MaxValue)
-                                    amfWriter.Write(index);
-                                else
-                                    amfWriter.Write(index);
+                                amfWriter.Write(index);
                             }
                         }
                     }
@@ -698,15 +701,15 @@ namespace TagTool.Geometry
                                 node.MeshIndices.Add(sceneMeshIndex);
                                 Scene.RootNode.Children.Add(node);
 
-                                // Ensure the material name is unique
+                                // Material name stuff
                                 var material = RenderModel.Materials[part.MaterialIndex];
                                 var renderMethodTag = material?.RenderMethod ?? defaultRenderMethod;
-                                var materialName = DecoratorBitmap != null ? DecoratorBitmap : renderMethodTag.ToString();
+                                var materialName = Path.GetFileNameWithoutExtension(DecoratorBitmap ?? renderMethodTag.ToString());
                                 materialName = Path.GetFileName(materialName);
 
                                 if (!materialNameMap.ContainsKey(materialName))
                                 {
-                                    var newMaterial = new Material
+                                    var Material = new Material
                                     {
                                         Name = materialName
                                     };
@@ -729,12 +732,12 @@ namespace TagTool.Geometry
                                                 WrapModeU = baseMapTexture.SamplerAddressMode.AddressU.ToString() == "Clamp" ? TextureWrapMode.Clamp : baseMapTexture.SamplerAddressMode.AddressU.ToString() == "Mirror" ? TextureWrapMode.Mirror : TextureWrapMode.Wrap,
                                                 WrapModeV = baseMapTexture.SamplerAddressMode.AddressV.ToString() == "Clamp" ? TextureWrapMode.Clamp : baseMapTexture.SamplerAddressMode.AddressV.ToString() == "Mirror" ? TextureWrapMode.Mirror : TextureWrapMode.Wrap
                                             };
-                                            newMaterial.AddMaterialTexture(ref baseMapTS);
+                                            Material.AddMaterialTexture(ref baseMapTS);
                                         }
                                     }
 
-                                    materialNameMap[materialName] = newMaterial;
-                                    Scene.Materials.Add(newMaterial);
+                                    materialNameMap[materialName] = Material;
+                                    Scene.Materials.Add(Material);
                                 }
 
                                 Scene.Meshes[sceneMeshIndex].MaterialIndex = Scene.Materials.IndexOf(materialNameMap[materialName]);
