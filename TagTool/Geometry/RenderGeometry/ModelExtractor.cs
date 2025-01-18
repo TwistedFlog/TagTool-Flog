@@ -508,13 +508,17 @@ namespace TagTool.Geometry
                         continue;
                     }
 
-                    var shaderName = Path.GetFileNameWithoutExtension(DecoratorBitmap != null ? DecoratorBitmap : material.RenderMethod.ToString());
+                    var defaultRenderMethod = CacheContext.TagCache.GetTag(@"shaders\invalid.rmsh");
+                    var renderMethodTag = material.RenderMethod ?? defaultRenderMethod;
+
+                    var shaderName = Path.GetFileNameWithoutExtension(
+                        DecoratorBitmap ?? renderMethodTag.ToString());
                     amfWriter.Write(NullTerminate(shaderName));
 
                     RenderMethod renderMethod = new RenderMethod();
                     using (var cacheStream = CacheContext.OpenCacheRead())
                     {
-                        renderMethod = CacheContext.Deserialize<RenderMethod>(cacheStream, material.RenderMethod);
+                        renderMethod = CacheContext.Deserialize<RenderMethod>(cacheStream, renderMethodTag);
                     }
 
                     for (int i = 0; i < 8; i++)
@@ -643,6 +647,9 @@ namespace TagTool.Geometry
             // Dictionary to map material names to Material objects
             var materialNameMap = new Dictionary<string, Material>();
 
+            // Default shader
+            var defaultRenderMethod = CacheContext.TagCache.GetTag(@"shaders\invalid.rmsh");
+
             // Iterate over regions and permutations to create nodes and meshes
             foreach (var region in RenderModel.Regions)
             {
@@ -692,19 +699,21 @@ namespace TagTool.Geometry
                                 Scene.RootNode.Children.Add(node);
 
                                 // Ensure the material name is unique
-                                var materialName = DecoratorBitmap != null ? DecoratorBitmap : RenderModel.Materials[part.MaterialIndex].RenderMethod.Name;
+                                var material = RenderModel.Materials[part.MaterialIndex];
+                                var renderMethodTag = material?.RenderMethod ?? defaultRenderMethod;
+                                var materialName = DecoratorBitmap != null ? DecoratorBitmap : renderMethodTag.ToString();
                                 materialName = Path.GetFileName(materialName);
 
                                 if (!materialNameMap.ContainsKey(materialName))
                                 {
-                                    var material = new Material
+                                    var newMaterial = new Material
                                     {
                                         Name = materialName
                                     };
 
                                     RenderMethod renderMethod;
                                     using (var cacheStream = CacheContext.OpenCacheRead())
-                                        renderMethod = CacheContext.Deserialize<RenderMethod>(cacheStream, RenderModel.Materials[part.MaterialIndex].RenderMethod);
+                                        renderMethod = CacheContext.Deserialize<RenderMethod>(cacheStream, renderMethodTag);
 
                                     if (renderMethod.ShaderProperties.Count > 0)
                                     {
@@ -720,12 +729,12 @@ namespace TagTool.Geometry
                                                 WrapModeU = baseMapTexture.SamplerAddressMode.AddressU.ToString() == "Clamp" ? TextureWrapMode.Clamp : baseMapTexture.SamplerAddressMode.AddressU.ToString() == "Mirror" ? TextureWrapMode.Mirror : TextureWrapMode.Wrap,
                                                 WrapModeV = baseMapTexture.SamplerAddressMode.AddressV.ToString() == "Clamp" ? TextureWrapMode.Clamp : baseMapTexture.SamplerAddressMode.AddressV.ToString() == "Mirror" ? TextureWrapMode.Mirror : TextureWrapMode.Wrap
                                             };
-                                            material.AddMaterialTexture(ref baseMapTS);
+                                            newMaterial.AddMaterialTexture(ref baseMapTS);
                                         }
                                     }
 
-                                    materialNameMap[materialName] = material;
-                                    Scene.Materials.Add(material);
+                                    materialNameMap[materialName] = newMaterial;
+                                    Scene.Materials.Add(newMaterial);
                                 }
 
                                 Scene.Meshes[sceneMeshIndex].MaterialIndex = Scene.Materials.IndexOf(materialNameMap[materialName]);
