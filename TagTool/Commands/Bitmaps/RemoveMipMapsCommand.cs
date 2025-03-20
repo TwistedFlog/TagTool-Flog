@@ -1,115 +1,180 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using TagTool.Cache;
+using TagTool.Cache.HaloOnline;
 using TagTool.Bitmaps;
-using TagTool.Bitmaps.DDS;
 using TagTool.Bitmaps.Utils;
-using TagTool.BlamFile;
-using TagTool.Commands.Common;
-using TagTool.IO;
 using TagTool.Tags;
 using TagTool.Tags.Definitions;
-using TagTool.Common;
-using System.Diagnostics;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace TagTool.Commands.Bitmaps
 {
     internal class RemoveMipMapsCommand : Command
     {
         private GameCache Cache { get; }
-        private CachedTag Tag { get; }
-        private Bitmap Bitmap { get; }
 
         public RemoveMipMapsCommand(GameCache cache, CachedTag tag, Bitmap bitmap)
-            : base(false,
-                  "RemoveMipMaps",
-                  "Removes all mipmaps from every image in the current bitmap, leaving only the highest resolution image for each.",
-                  "RemoveMipMaps",
-                  "Reencodes each bitmap image using its original format with only mip level 0, reducing overall file size.")
+            : base(true,
+                  "RemoveModMipMaps",
+                  "Removes all mipmaps from every bitmap tag in the current mod package (except for blacklisted ones), leaving only the highest resolution images.",
+                  "RemoveModMipMaps [blacklist_substring1] [blacklist_substring2] ...",
+                  "Processes all bitmap tags in the mod package (excluding base cache tags and any tags whose names contain one of the specified blacklist substrings) and removes extra mipmap levels to reduce overall file sizes.")
         {
             Cache = cache;
-            Tag = tag;
-            Bitmap = bitmap;
         }
 
         public override object Execute(List<string> args)
         {
-            // We'll update each image in the bitmap file.
-            List<TagResourceReference> newHardwareTextures = new List<TagResourceReference>();
+            // Convert each provided argument to lowercase and normalize backslashes to forward slashes.
+            List<string> blacklistedSubstrings = args
+                .Select(a => a.ToLowerInvariant().Replace('\\', '/'))
+                .ToList();
 
-            // Process every image within the bitmap.
-            for (int imageIndex = 0; imageIndex < Bitmap.Images.Count; imageIndex++)
+            // Only process tags that are part of the mod package.
+            var bitmapTags = new List<CachedTag>();
+            foreach (var tag in Cache.TagCache.TagTable)
             {
-                var image = Bitmap.Images[imageIndex];
-
-                // Get the hardware texture resource corresponding to this image.
-                var resourceReference = Bitmap.HardwareTextures[imageIndex];
-                var resourceDefinition = Cache.ResourceCache.GetBitmapTextureInteropResource(resourceReference);
-
-                // Retrieve the primary and secondary data buffers.
-                byte[] primaryData = resourceDefinition?.Texture.Definition.PrimaryResourceData.Data;
-                byte[] secondaryData = resourceDefinition?.Texture.Definition.SecondaryResourceData.Data;
-                BitmapFormat currentFormat = image.Format;
-                int width = image.Width;
-                int height = image.Height;
-
-                // Extract only mip level 0 (highest resolution) for all layers.
-                byte[] mip0Data;
-                using (var result = new MemoryStream())
+                // Only consider mod package tags.
+                if (tag is CachedTagHaloOnline haloTag)
                 {
-                    int mipLevel = 0;
-                    for (int layerIndex = 0; layerIndex < image.Depth; layerIndex++)
-                    {
-                        int pixelDataOffset = BitmapUtilsPC.GetTextureOffset(image, mipLevel);
-                        int pixelDataSize = BitmapUtilsPC.GetMipmapPixelDataSize(image, mipLevel);
-                        byte[] pixelData = new byte[pixelDataSize];
-
-                        // Determine which resource data to use.
-                        if ((mipLevel == 0 && resourceDefinition.Texture.Definition.Bitmap.HighResInSecondaryResource > 0) || primaryData == null)
-                        {
-                            Array.Copy(secondaryData, pixelDataOffset, pixelData, 0, pixelData.Length);
-                        }
-                        else
-                        {
-                            if (secondaryData != null)
-                                pixelDataOffset -= secondaryData.Length;
-                            Array.Copy(primaryData, pixelDataOffset, pixelData, 0, pixelDataSize);
-                        }
-                        result.Write(pixelData, 0, pixelData.Length);
-                    }
-                    mip0Data = result.ToArray();
+                    if (haloTag.IsEmpty())
+                        continue;
+                }
+                else
+                {
+                    // Not a mod package tag.
+                    continue;
                 }
 
-                // Create a new bitmap image entry based on the existing one.
-                BaseBitmap resultBitmap = new BaseBitmap(image);
-                resultBitmap.UpdateFormat(currentFormat);
-                resultBitmap.Data = mip0Data;
-                resultBitmap.MipMapCount = 0; // Remove all mipmaps
+                // Only add bitmap tags (group identifier "bitmap").
+                if (!IsBitmapTag(tag))
+                    continue;
 
-                // Update compression flags.
-                if (!BitmapUtils.IsCompressedFormat(resultBitmap.Format))
-                    resultBitmap.Flags &= ~BitmapFlags.Compressed;
-                else
-                    resultBitmap.Flags |= BitmapFlags.Compressed;
+                // Normalize the tag's full name.
+                string tagFullName = (tag.Name ?? tag.ToString()).Replace('\\', '/').ToLowerInvariant();
 
-                // Update the image's metadata.
-                BitmapUtils.SetBitmapImageData(resultBitmap, image);
+                // Check which blacklist substrings match.
+                var matchingSubstrings = blacklistedSubstrings.Where(bl => tagFullName.Contains(bl)).ToList();
+                if (matchingSubstrings.Any())
+                {
+                    Console.WriteLine($"Skipping blacklisted bitmap tag: {tagFullName} (matches: {string.Join(", ", matchingSubstrings)})");
+                    continue;
+                }
 
-                // Create a new resource for the updated image.
-                var newBitmapResourceDefinition = BitmapUtils.CreateBitmapTextureInteropResource(resultBitmap);
-                var newResourceReference = Cache.ResourceCache.CreateBitmapResource(newBitmapResourceDefinition);
-
-                newHardwareTextures.Add(newResourceReference);
+                bitmapTags.Add(tag);
             }
 
-            // Replace the hardware textures with the new ones for all images.
-            Bitmap.HardwareTextures = newHardwareTextures;
-            Bitmap.InterleavedHardwareTextures = new List<TagResourceReference>();
+            if (bitmapTags.Count == 0)
+            {
+                Console.WriteLine("No bitmap tags found in the mod package.");
+                return true;
+            }
 
+            foreach (var tag in bitmapTags)
+            {
+                // Deserialize the tag definition.
+                object tagDefinition;
+                using (var readStream = Cache.OpenCacheRead())
+                {
+                    tagDefinition = Cache.Deserialize(readStream, tag);
+                }
+
+                // Cast to Bitmap (ensure this matches your project’s type).
+                var bitmap = tagDefinition as Bitmap;
+                if (bitmap == null)
+                {
+                    Console.WriteLine($"Tag {tag.Name} is not a valid bitmap. Skipping.");
+                    continue;
+                }
+
+                // Process each image in the bitmap.
+                var newHardwareTextures = new List<TagResourceReference>();
+                for (int imageIndex = 0; imageIndex < bitmap.Images.Count; imageIndex++)
+                {
+                    var image = bitmap.Images[imageIndex];
+                    var resourceReference = bitmap.HardwareTextures[imageIndex];
+                    var resourceDefinition = Cache.ResourceCache.GetBitmapTextureInteropResource(resourceReference);
+
+                    byte[] primaryData = resourceDefinition?.Texture.Definition.PrimaryResourceData.Data;
+                    byte[] secondaryData = resourceDefinition?.Texture.Definition.SecondaryResourceData.Data;
+                    BitmapFormat currentFormat = image.Format;
+                    int width = image.Width;
+                    int height = image.Height;
+
+                    // Extract only mip level 0 (highest resolution) for each layer.
+                    byte[] mip0Data;
+                    using (var ms = new MemoryStream())
+                    {
+                        int mipLevel = 0;
+                        for (int layerIndex = 0; layerIndex < image.Depth; layerIndex++)
+                        {
+                            int pixelDataOffset = BitmapUtilsPC.GetTextureOffset(image, mipLevel);
+                            int pixelDataSize = BitmapUtilsPC.GetMipmapPixelDataSize(image, mipLevel);
+                            byte[] pixelData = new byte[pixelDataSize];
+
+                            if ((mipLevel == 0 && resourceDefinition.Texture.Definition.Bitmap.HighResInSecondaryResource > 0) || primaryData == null)
+                            {
+                                Array.Copy(secondaryData, pixelDataOffset, pixelData, 0, pixelData.Length);
+                            }
+                            else
+                            {
+                                if (secondaryData != null)
+                                    pixelDataOffset -= secondaryData.Length;
+                                Array.Copy(primaryData, pixelDataOffset, pixelData, 0, pixelDataSize);
+                            }
+                            ms.Write(pixelData, 0, pixelData.Length);
+                        }
+                        mip0Data = ms.ToArray();
+                    }
+
+                    // In this version we directly use the mip0Data without full decode/encode to save time.
+                    // (If you require a full re-encode, you can uncomment the following two lines:)
+                    // byte[] rawData = BitmapDecoder.DecodeBitmap(mip0Data, currentFormat, width, height);
+                    // mip0Data = BitmapDecoder.EncodeBitmap(rawData, currentFormat, width, height);
+
+                    // Create an updated image entry.
+                    BaseBitmap resultBitmap = new BaseBitmap(image);
+                    resultBitmap.UpdateFormat(currentFormat);
+                    resultBitmap.Data = mip0Data;
+                    resultBitmap.MipMapCount = 0; // Remove extra mipmaps
+
+                    if (!BitmapUtils.IsCompressedFormat(resultBitmap.Format))
+                        resultBitmap.Flags &= ~BitmapFlags.Compressed;
+                    else
+                        resultBitmap.Flags |= BitmapFlags.Compressed;
+
+                    BitmapUtils.SetBitmapImageData(resultBitmap, image);
+                    var newBitmapResourceDefinition = BitmapUtils.CreateBitmapTextureInteropResource(resultBitmap);
+                    var newResourceReference = Cache.ResourceCache.CreateBitmapResource(newBitmapResourceDefinition);
+
+                    newHardwareTextures.Add(newResourceReference);
+                }
+
+                // Update the bitmap tag with the new resource data.
+                bitmap.HardwareTextures = newHardwareTextures;
+                bitmap.InterleavedHardwareTextures = new List<TagResourceReference>();
+
+                // Save the updated bitmap tag back to the mod package.
+                using (var writeStream = Cache.OpenCacheReadWrite())
+                {
+                    Cache.Serialize(writeStream, tag, bitmap);
+                }
+                Console.WriteLine($"Processed bitmap tag: {tag.Name}");
+            }
+
+            Console.WriteLine("Done processing all bitmap tags in the mod package.");
             return true;
+        }
+
+        /// <summary>
+        /// Determines if the specified tag is a bitmap tag.
+        /// Assumes that bitmap tags use the group identifier "bitmap".
+        /// </summary>
+        private bool IsBitmapTag(CachedTag tag)
+        {
+            return tag.Group.ToString().Equals("bitmap", StringComparison.OrdinalIgnoreCase);
         }
     }
 }
