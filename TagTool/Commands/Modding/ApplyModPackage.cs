@@ -19,30 +19,25 @@ namespace TagTool.Commands.Modding
     class ApplyModPackageCommand : Command
     {
         private GameCacheHaloOnlineBase BaseCache { get; }
-
         private GameCacheModPackage ModCache { get; }
-
         private Dictionary<int, int> TagMapping;
-
         private Stream CacheStream;
-
         private Dictionary<string, CachedTag> CacheTagsByName;
-
         private Dictionary<StringId, StringId> StringIdMapping;
 
+        // New field to keep track of blacklisted tags.
+        private HashSet<string> BlacklistedTags;
 
         public ApplyModPackageCommand(GameCacheModPackage modCache) :
             base(false,
-
                 "ApplyModPackage",
                 "Apply current mod package to the base cache. \n",
-
                 "ApplyModPackage [Tag cache index (default=0)]",
-
                 "Apply current mod package to the base cache. \n")
         {
             BaseCache = modCache.BaseCacheReference;
             ModCache = modCache;
+            BlacklistedTags = new HashSet<string>();  // Initialize the blacklist.
         }
 
         public override object Execute(List<string> args)
@@ -54,9 +49,8 @@ namespace TagTool.Commands.Modding
 
             if (args.Count == 0)
                 tagCacheIndex = 0;
-            else
-                if (!int.TryParse(args[0], System.Globalization.NumberStyles.Integer, null, out tagCacheIndex))
-                    return new TagToolError(CommandError.ArgInvalid, $"\"{args[0]}\"");
+            else if (!int.TryParse(args[0], System.Globalization.NumberStyles.Integer, null, out tagCacheIndex))
+                return new TagToolError(CommandError.ArgInvalid, $"\"{args[0]}\"");
 
             if (tagCacheIndex != ModCache.GetCurrentTagCacheIndex())
             {
@@ -76,11 +70,9 @@ namespace TagTool.Commands.Modding
                 .Select(tags => tags.Last())
                 .ToDictionary(tag => $"{tag.Name}.{tag.Group}", tag => tag);
 
-
             // shut down base cache stream from mod cache and reopen once applying is complete
             using (CacheStream = BaseCache.OpenCacheReadWrite())
             {
-
                 for (int i = 0; i < ModCache.TagCache.Count; i++)
                 {
                     var modTag = ModCache.TagCache.GetTag(i);
@@ -163,7 +155,6 @@ namespace TagTool.Commands.Modding
                 // apply mod files
                 if (ModCache.BaseModPackage.Files != null && ModCache.BaseModPackage.Files.Count > 0)
                 {
-
                     if (BaseCache is GameCacheHaloOnline)
                     {
                         Console.WriteLine("Mod Files exist in package. Overwrite in BaseCache? (y/n)");
@@ -186,12 +177,11 @@ namespace TagTool.Commands.Modding
 
                                 var directoryName = Path.GetDirectoryName(file.Key.ToString());
 
-                                if (!string.IsNullOrEmpty(directoryName)) 
+                                if (!string.IsNullOrEmpty(directoryName))
                                     directory.CreateSubdirectory(directoryName);
 
                                 BaseCache.AddModFile(Path.Combine(directory.FullName, file.Key), file.Value);
                             }
-
                         }
                         else
                             Console.WriteLine("Skipping Mod Files");
@@ -204,7 +194,6 @@ namespace TagTool.Commands.Modding
                         }
                 }
 
-
                 BaseCache.SaveTagNames();
                 BaseCache.SaveStrings();
             }
@@ -214,35 +203,33 @@ namespace TagTool.Commands.Modding
 
         private CachedTag ConvertCachedTagInstance(ModPackage modPack, CachedTag modTag, bool isTagReference = true)
         {
-            // tag has already been converted
+            // If the tag has already been converted, return its reference.
             if (TagMapping.ContainsKey(modTag.Index))
-                return BaseCache.TagCache.GetTag(TagMapping[modTag.Index]);   // get the matching tag in the destination package
+                return BaseCache.TagCache.GetTag(TagMapping[modTag.Index]);
 
-            // Determine if tag requires conversion
+            string fullTagName = $"{modTag.Name}.{modTag.Group}";
+
+            // Determine if tag requires conversion.
             if (((CachedTagHaloOnline)modTag).IsEmpty())
             {
-                //modtag references a base tag, figure out which one is it and add it to the mapping
+                // modTag references a base tag; try to locate it in the base cache.
                 CachedTag cacheTag;
-                if (CacheTagsByName.TryGetValue($"{modTag.Name}.{modTag.Group}", out cacheTag))
+                if (CacheTagsByName.TryGetValue(fullTagName, out cacheTag))
                 {
                     TagMapping[modTag.Index] = cacheTag.Index;
                     return cacheTag;
                 }
 
-                // Failed to find tag in base cache
-                Console.Error.WriteLine($"Failed to find {modTag.Name}.{modTag.Group} in the base cache, returning null tag reference.");
-
-                // check if anything actually depends on this tag
-                if (!isTagReference)
-                    return null;
-
-                throw new Exception("Failed to find tag when applying.");
+                // Modified behavior: tag not found in base cache.
+                Console.Error.WriteLine($"Failed to find {fullTagName} in the base cache, marking as blacklisted tag.");
+                BlacklistedTags.Add(fullTagName);
+                return null;
             }
             else
             {
-                Console.WriteLine($"Converting {modTag.Name}.{modTag.Group}...");
+                Console.WriteLine($"Converting {fullTagName}...");
                 CachedTag newTag;
-                if (!CacheTagsByName.TryGetValue($"{modTag.Name}.{modTag.Group}", out newTag))
+                if (!CacheTagsByName.TryGetValue(fullTagName, out newTag))
                 {
                     newTag = BaseCache.TagCache.AllocateTag(modTag.Group);
                     newTag.Name = modTag.Name;
@@ -292,7 +279,6 @@ namespace TagTool.Commands.Modding
                     return ConvertCollection(modPack, collection);
                 case CachedTag tag:
                     return ConvertCachedTagInstance(modPack, tag);
-                
             }
             return data;
         }
@@ -307,11 +293,11 @@ namespace TagTool.Commands.Modding
                 var modString = modPack.StringTable.GetString(stringId);
                 var cacheStringTest = BaseCache.StringTable.GetString(stringId);
 
-                if (cacheStringTest != null && modString == cacheStringTest)            // check if base cache contains the exact same id with matching strings
+                if (cacheStringTest != null && modString == cacheStringTest)
                     cacheStringId = stringId;
-                else if (BaseCache.StringTable.Contains(modString))                // try to find the string among all stringids
+                else if (BaseCache.StringTable.Contains(modString))
                     cacheStringId = BaseCache.StringTable.GetStringId(modString);
-                else                                                                    // add new stringid
+                else
                     cacheStringId = BaseCache.StringTable.AddString(modString);
 
                 StringIdMapping[stringId] = cacheStringId;
@@ -469,6 +455,11 @@ namespace TagTool.Commands.Modding
                 return;
 
             var tag = ConvertCachedTagInstance(modPack, ModCache.TagCacheGenHO.Tags[tagIndex]);
+            if (tag == null)
+            {
+                Console.Error.WriteLine($"Failed to convert tag reference for index {tagIndex}");
+                return;
+            }
             expr.Data = BitConverter.GetBytes(tag.Index).ToArray();
         }
 
