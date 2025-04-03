@@ -142,7 +142,7 @@ namespace TagTool.Commands.ModelAnimationGraphs
                 string file_name = Path.GetFileNameWithoutExtension(filepath.FullName).Replace(' ', ':');
                 StringId animation_name = CacheContext.StringTable.GetStringId(file_name);
                 if (animation_name == StringId.Invalid)
-                    animation_name = CacheContext.StringTable.AddString(file_name);
+                    animation_name = CacheContext.StringTable.GetOrAddString(file_name);
                 else
                 {
                     int existingIndex = Animation.Animations.FindIndex(n => n.Name == animation_name);
@@ -224,7 +224,6 @@ namespace TagTool.Commands.ModelAnimationGraphs
                 AnimationBlock.AnimationData.ResourceGroupIndex = (short)(Animation.ResourceGroups.Count - 1);
                 AnimationBlock.AnimationData.ResourceGroupMemberIndex = 0;
 
-                // If replacing and the "keep" flag is set, preserve specific properties from the existing animation
                 if (replacing && KeepExisting)
                 {
                     int existingIndex = Animation.Animations.FindIndex(n => n.Name == animation_name);
@@ -250,7 +249,6 @@ namespace TagTool.Commands.ModelAnimationGraphs
                     Animation.Animations.Add(AnimationBlock);
                 }
 
-                // If "noblock" flag is set and we are replacing, check if any existing mode block already points to this animation index.
                 if (replacing && NoBlock)
                 {
                     bool found = false;
@@ -278,7 +276,6 @@ namespace TagTool.Commands.ModelAnimationGraphs
                         continue; // Skip mode block creation for this animation.
                 }
 
-                // Create mode entries based on the animation file name if it is properly formatted.
                 AddModeEntries(file_name, Animation.Animations.FindIndex(n => n.Name == animation_name));
 
                 if (replacing)
@@ -362,7 +359,7 @@ namespace TagTool.Commands.ModelAnimationGraphs
         {
             StringId modeStringID = CacheContext.StringTable.GetStringId(modeString);
             if (modeStringID == StringId.Invalid)
-                modeStringID = CacheContext.StringTable.AddString(modeString);
+                modeStringID = CacheContext.StringTable.GetOrAddString(modeString);
 
             int modesIndex = Animation.Modes.FindIndex(m => m.Name == modeStringID);
             if (modesIndex != -1)
@@ -382,7 +379,7 @@ namespace TagTool.Commands.ModelAnimationGraphs
         {
             StringId classStringID = CacheContext.StringTable.GetStringId(classString);
             if (classStringID == StringId.Invalid)
-                classStringID = CacheContext.StringTable.AddString(classString);
+                classStringID = CacheContext.StringTable.GetOrAddString(classString);
 
             int classIndex = Animation.Modes[modeIndex].WeaponClass.FindIndex(m => m.Label == classStringID);
             if (classIndex != -1)
@@ -402,7 +399,7 @@ namespace TagTool.Commands.ModelAnimationGraphs
         {
             StringId typeStringID = CacheContext.StringTable.GetStringId(typeString);
             if (typeStringID == StringId.Invalid)
-                typeStringID = CacheContext.StringTable.AddString(typeString);
+                typeStringID = CacheContext.StringTable.GetOrAddString(typeString);
 
             int typeIndex = Animation.Modes[modeIndex].WeaponClass[classIndex].WeaponType.FindIndex(m => m.Label == typeStringID);
             if (typeIndex != -1)
@@ -426,7 +423,7 @@ namespace TagTool.Commands.ModelAnimationGraphs
         {
             StringId actionStringID = CacheContext.StringTable.GetStringId(actionString);
             if (actionStringID == StringId.Invalid)
-                actionStringID = CacheContext.StringTable.AddString(actionString);
+                actionStringID = CacheContext.StringTable.GetOrAddString(actionString);
 
             var set = Animation.Modes[modeIndex].WeaponClass[classIndex].WeaponType[typeIndex].Set;
             var newAction = new ModelAnimationGraph.Mode.WeaponClassBlock.WeaponTypeBlock.Entry
