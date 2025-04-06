@@ -21,24 +21,11 @@ namespace TagTool.Commands.RenderModels
 
         public ReplaceRenderGeometryCommand(GameCache cache, CachedTag tag, RenderModel definition) :
             base(false,
-
-                name:
-                "ReplaceRenderGeometry",
-
-                description:
-                "Replaces the render_geometry of the current render_model tag.",
-
-                usage:
-                "ReplaceRenderGeometry <COLLADA or FBX Scene> [IndexBufferFormat]",
-
-                examples:
-                "ReplaceRenderGeometry d:\\model.dae trianglestrip\nReplaceRenderGeometry d:\\model.fbx trianglestrip",
-
-                helpMessage:
-                "- Replaces the render_geometry of the current render_model tag with geometry compiled from a COLLADA (.DAE) or FBX (.FBX) scene file.\n" +
-                "- Your DAE or FBX file must contain a single mesh for every permutation.\n" +
-                "- Name your meshes as {region}:{permutation} (e.g. hull:base).\n" +
-                "- IndexBufferFormat is TriangleList unless TriangleStrip specified.")
+                name: "ReplaceRenderGeometry",
+                description: "Replaces the render_geometry of the current render_model tag.",
+                usage: "ReplaceRenderGeometry <COLLADA or FBX Scene> [IndexBufferFormat] [updatenodes]",
+                examples: "ReplaceRenderGeometry d:\\model.dae trianglestrip updatenodes\nReplaceRenderGeometry d:\\model.fbx updatenodes",
+                helpMessage: "- Replaces the render_geometry of the current render_model tag with geometry compiled from a COLLADA (.DAE) or FBX (.FBX) scene file.\n- Your DAE or FBX file must contain a single mesh for every permutation.\n- Name your meshes as {region}:{permutation} (e.g. hull:base).\n- IndexBufferFormat is TriangleList unless TriangleStrip specified.\n- When the optional flag 'updatenodes' is specified the tool will update the transform values for all Nodes and Runtime Node Orientations.")
         {
             Cache = cache;
             Tag = tag;
@@ -51,7 +38,9 @@ namespace TagTool.Commands.RenderModels
 
             if (args.Count < 1 || args.Count > 2)
                 return new TagToolError(CommandError.ArgCount);
-
+            bool updateNodes = args.Any(a => a.ToLower() == "updatenodes");
+            string sceneFilePath = args[0];
+            string indexBufferFormatArg = args.FirstOrDefault(a => a.ToLower() != "updatenodes" && a != sceneFilePath);
             if (!Cache.TagCache.TryGetTag<Shader>(@"shaders\invalid", out var defaultShaderTag))
             {
                 new TagToolWarning("shaders\\invalid.shader' not found!\n"
@@ -72,10 +61,10 @@ namespace TagTool.Commands.RenderModels
                 return new TagToolError(CommandError.FileType, $"\"{sceneFile.FullName}\"");
 
             // Call ExecuteInternal with the appropriate parameters
-            return ExecuteInternal(Cache, Tag, Definition, stringIdCount, sceneFile, indexBufferFormat);
+            return ExecuteInternal(Cache, Tag, Definition, stringIdCount, sceneFile, indexBufferFormat, updateNodes);
         }
 
-        public static object ExecuteInternal(GameCache Cache, CachedTag Tag, RenderModel Definition, int InitialStringIdCount, FileInfo SceneFile, IndexBufferFormat IndexBufferFormat)
+        public static object ExecuteInternal(GameCache Cache, CachedTag Tag, RenderModel Definition, int InitialStringIdCount, FileInfo SceneFile, IndexBufferFormat IndexBufferFormat, bool updateNodes = false)
         {
             Console.WriteLine();
 
@@ -97,7 +86,79 @@ namespace TagTool.Commands.RenderModels
                     PostProcessSteps.Triangulate |
                     PostProcessSteps.JoinIdenticalVertices);
             }
+            if (updateNodes)
+            {
+                Console.WriteLine("   Updating node transforms from scene hierarchy...");
+                Dictionary<string, Assimp.Node> sceneNodesMap = new Dictionary<string, Assimp.Node>();
+                void TraverseScene(Assimp.Node node)
+                {
+                    if (!sceneNodesMap.ContainsKey(node.Name.ToLower()))
+                        sceneNodesMap[node.Name.ToLower()] = node;
+                    foreach (var child in node.Children)
+                        TraverseScene(child);
+                }
+                TraverseScene(scene.RootNode);
+                foreach (var node in Definition.Nodes)
+                {
+                    string nodeName = Cache.StringTable.GetString(node.Name).Replace('.', '_').ToLower();
+                    if (sceneNodesMap.TryGetValue(nodeName, out Assimp.Node sNode))
+                    {
+                        sNode.Transform.Decompose(out Vector3D scale, out Assimp.Quaternion rotation, out Vector3D translation);
+                        // Set default transforms (scaling conversion applied)
+                        node.DefaultTranslation = new RealPoint3d(translation.X * 0.01f, translation.Y * 0.01f, translation.Z * 0.01f);
+                        float qx = rotation.X, qy = rotation.Y, qz = rotation.Z, qw = rotation.W;
+                        node.DefaultRotation = new RealQuaternion(qx, qy, qz, qw);
+                        node.DefaultScale = scale.X; // assuming uniform scale
 
+                        // Build rotation matrix from quaternion (row-major)
+                        float r00 = 1 - 2 * qy * qy - 2 * qz * qz;
+                        float r01 = 2 * qx * qy - 2 * qz * qw;
+                        float r02 = 2 * qx * qz + 2 * qy * qw;
+                        float r10 = 2 * qx * qy + 2 * qz * qw;
+                        float r11 = 1 - 2 * qx * qx - 2 * qz * qz;
+                        float r12 = 2 * qy * qz - 2 * qx * qw;
+                        float r20 = 2 * qx * qz - 2 * qy * qw;
+                        float r21 = 2 * qy * qz + 2 * qx * qw;
+                        float r22 = 1 - 2 * qx * qx - 2 * qy * qy;
+
+                        // Inverse rotation is the transpose of R.
+                        // Thus, the inverse rotation matrix R^T has rows:
+                        // row1 = (r00, r10, r20)
+                        // row2 = (r01, r11, r21)
+                        // row3 = (r02, r12, r22)
+                        node.InverseForward = new RealVector3d(r00, r10, r20);
+                        node.InverseLeft = new RealVector3d(r01, r11, r21);
+                        node.InverseUp = new RealVector3d(r02, r12, r22);
+
+                        // Compute inverse translation: -R^T * translation / scale.
+                        float dtX = node.DefaultTranslation.X;
+                        float dtY = node.DefaultTranslation.Y;
+                        float dtZ = node.DefaultTranslation.Z;
+                        float invScale = 1.0f / node.DefaultScale;
+                        float itx = -(r00 * dtX + r10 * dtY + r20 * dtZ) * invScale;
+                        float ity = -(r01 * dtX + r11 * dtY + r21 * dtZ) * invScale;
+                        float itz = -(r02 * dtX + r12 * dtY + r22 * dtZ) * invScale;
+                        node.InversePosition = new RealPoint3d(itx, ity, itz);
+                    }
+                    else
+                    {
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine($"   Warning: Scene node matching render model node '{nodeName}' not found.");
+                        Console.ResetColor();
+                    }
+                }
+                if (Definition.RuntimeNodeOrientations != null && Definition.RuntimeNodeOrientations.Count == Definition.Nodes.Count)
+                {
+                    for (int i = 0; i < Definition.Nodes.Count; i++)
+                    {
+                        var updatedNode = Definition.Nodes[i];
+                        Definition.RuntimeNodeOrientations[i].Translation = updatedNode.DefaultTranslation;
+                        Definition.RuntimeNodeOrientations[i].Rotation = updatedNode.DefaultRotation;
+                        Definition.RuntimeNodeOrientations[i].Scale = updatedNode.DefaultScale;
+                    }
+                }
+                Console.WriteLine("   Node transform update complete.\n");
+            }
             RenderModelBuilder builder = new RenderModelBuilder(Cache);
             Dictionary<string, sbyte> nodes = new Dictionary<string, sbyte>();
             Dictionary<string, short> materialIndices = new Dictionary<string, short>();
