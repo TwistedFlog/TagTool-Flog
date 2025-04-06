@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Assimp;
-using AssimpMesh = Assimp.Mesh;  // Alias to disambiguate from TagTool.Geometry.Mesh
+using AssimpMesh = Assimp.Mesh;
 using TagTool.Cache;
 using TagTool.Common;
 using TagTool.Commands.Common;
