@@ -21,11 +21,16 @@ namespace TagTool.Commands.RenderModels
 
         public ReplaceRenderGeometryCommand(GameCache cache, CachedTag tag, RenderModel definition) :
             base(false,
-                name: "ReplaceRenderGeometry",
-                description: "Replaces the render_geometry of the current render_model tag.",
-                usage: "ReplaceRenderGeometry <COLLADA or FBX Scene> [IndexBufferFormat] [updatenodes] [markers]",
-                examples: "ReplaceRenderGeometry d:\\model.dae trianglestrip updatenodes markers\nReplaceRenderGeometry d:\\model.fbx updatenodes markers",
-                helpMessage: "- Replaces the render_geometry of the current render_model tag with geometry compiled from a COLLADA (.DAE) or FBX (.FBX) scene file.\n- Your DAE or FBX file must contain a single mesh for every permutation.\n- Name your meshes as {region}:{permutation} (e.g. hull:base).\n- IndexBufferFormat is TriangleList unless TriangleStrip specified.\n- When the optional flag 'updatenodes' is specified the tool will update the transform values for all Nodes and Runtime Node Orientations.\n- When the optional flag 'markers' is specified the tool will remove all existing markers and generate new marker groups by reading nodes whose names begin with '#' from the source file.")
+        name: "ReplaceRenderGeometry",
+        description: "Replaces the render_geometry of the current render_model tag.",
+        usage: "ReplaceRenderGeometry <COLLADA or FBX Scene> [IndexBufferFormat] [updatenodes] [markers]",
+        examples: "ReplaceRenderGeometry d:\\model.dae trianglestrip updatenodes markers\nReplaceRenderGeometry d:\\model.fbx updatenodes markers",
+        helpMessage: "- Replaces the render_geometry of the current render_model tag with geometry compiled from a COLLADA (.DAE) or FBX (.FBX) scene file.\n" +
+                     "- Name your meshes as {region}:{permutation} (e.g. hull:base).\n" +
+                     "- IndexBufferFormat is TriangleStrip unless TriangleList specified.\n" +
+                     "- When the optional flag 'updatenodes' is specified the tool will update the transform values for all Nodes and Runtime Node Orientations.\n" +
+                     "- When the optional flag 'markers' is specified the tool will remove all existing markers and generate new marker groups by reading nodes whose names begin with '#' from the source file.\n" +
+                     "Note: FBX is only supported for updating nodes and markers")
         {
             Cache = cache;
             Tag = tag;
@@ -51,7 +56,8 @@ namespace TagTool.Commands.RenderModels
 
             var sceneFile = new FileInfo(args[0]);
 
-            var indexBufferFormat = args.Count > 1 && args[1].ToLower() == "trianglestrip" ? IndexBufferFormat.TriangleStrip : IndexBufferFormat.TriangleList;
+            var indexBufferFormat = args.Count > 1 && args[1].ToLower() == "trianglelist" ? IndexBufferFormat.TriangleList : IndexBufferFormat.TriangleStrip;
+
 
             if (!sceneFile.Exists)
                 return new TagToolError(CommandError.FileNotFound);
@@ -90,6 +96,7 @@ namespace TagTool.Commands.RenderModels
                 Dictionary<string, Assimp.Node> sceneNodesMap = new Dictionary<string, Assimp.Node>();
                 void TraverseScene(Assimp.Node node)
                 {
+                    string key = node.Name.Replace('.', '_').ToLower();
                     if (!sceneNodesMap.ContainsKey(node.Name.ToLower()))
                         sceneNodesMap[node.Name.ToLower()] = node;
                     foreach (var child in node.Children)
