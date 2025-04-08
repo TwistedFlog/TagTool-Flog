@@ -116,35 +116,28 @@ namespace TagTool.Commands.RenderModels
                         node.DefaultRotation = new RealQuaternion(qx, qy, qz, qw);
                         node.DefaultScale = scale.X; // assuming uniform scale
 
-                        // Build rotation matrix from quaternion (row-major)
-                        float r00 = 1 - 2 * qy * qy - 2 * qz * qz;
-                        float r01 = 2 * qx * qy - 2 * qz * qw;
-                        float r02 = 2 * qx * qz + 2 * qy * qw;
-                        float r10 = 2 * qx * qy + 2 * qz * qw;
-                        float r11 = 1 - 2 * qx * qx - 2 * qz * qz;
-                        float r12 = 2 * qy * qz - 2 * qx * qw;
-                        float r20 = 2 * qx * qz - 2 * qy * qw;
-                        float r21 = 2 * qy * qz + 2 * qx * qw;
-                        float r22 = 1 - 2 * qx * qx - 2 * qy * qy;
+                        // float r00 = 1 - 2 * qy * qy - 2 * qz * qz;
+                        // float r01 = 2 * qx * qy - 2 * qz * qw;
+                        // float r02 = 2 * qx * qz + 2 * qy * qw;
+                        // float r10 = 2 * qx * qy + 2 * qz * qw;
+                        // float r11 = 1 - 2 * qx * qx - 2 * qz * qz;
+                        // float r12 = 2 * qy * qz - 2 * qx * qw;
+                        // float r20 = 2 * qx * qz - 2 * qy * qw;
+                        // float r21 = 2 * qy * qz + 2 * qx * qw;
+                        // float r22 = 1 - 2 * qx * qx - 2 * qy * qy;
 
-                        // Inverse rotation is the transpose of R.
-                        // Thus, the inverse rotation matrix R^T has rows:
-                        // row1 = (r00, r10, r20)
-                        // row2 = (r01, r11, r21)
-                        // row3 = (r02, r12, r22)
-                        node.InverseForward = new RealVector3d(r00, r10, r20);
-                        node.InverseLeft = new RealVector3d(r01, r11, r21);
-                        node.InverseUp = new RealVector3d(r02, r12, r22);
+                        // node.InverseForward = new RealVector3d(r00, r10, r20);
+                        // node.InverseLeft = new RealVector3d(r01, r11, r21);
+                        // node.InverseUp = new RealVector3d(r02, r12, r22);
 
-                        // Compute inverse translation: -R^T * translation / scale.
-                        float dtX = node.DefaultTranslation.X;
-                        float dtY = node.DefaultTranslation.Y;
-                        float dtZ = node.DefaultTranslation.Z;
-                        float invScale = 1.0f / node.DefaultScale;
-                        float itx = -(r00 * dtX + r10 * dtY + r20 * dtZ) * invScale;
-                        float ity = -(r01 * dtX + r11 * dtY + r21 * dtZ) * invScale;
-                        float itz = -(r02 * dtX + r12 * dtY + r22 * dtZ) * invScale;
-                        node.InversePosition = new RealPoint3d(itx, ity, itz);
+                        // float dtX = node.DefaultTranslation.X;
+                        // float dtY = node.DefaultTranslation.Y;
+                        // float dtZ = node.DefaultTranslation.Z;
+                        // float invScale = 1.0f / node.DefaultScale;
+                        // float itx = -(r00 * dtX + r10 * dtY + r20 * dtZ) * invScale;
+                        // float ity = -(r01 * dtX + r11 * dtY + r21 * dtZ) * invScale;
+                        // float itz = -(r02 * dtX + r12 * dtY + r22 * dtZ) * invScale;
+                        // node.InversePosition = new RealPoint3d(itx, ity, itz);
                     }
                     else
                     {
@@ -848,7 +841,10 @@ namespace TagTool.Commands.RenderModels
                 ProcessMarkerNode(scene.RootNode);
                 newDefinition.MarkerGroups = markerGroups.Values.ToList();
             }
-
+            else 
+            {
+                newDefinition.MarkerGroups = Definition.MarkerGroups;
+            }
             // Update the definition with the new built data.
             Definition.Regions = newDefinition.Regions;
             Definition.Geometry = newDefinition.Geometry;
