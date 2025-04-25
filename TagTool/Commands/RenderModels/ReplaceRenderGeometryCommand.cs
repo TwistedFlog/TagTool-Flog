@@ -339,8 +339,8 @@ namespace TagTool.Commands.RenderModels
                         Console.ResetColor();
                     }
 
-                    ushort partStartVertex = 0;
-                    ushort partStartIndex = 0;
+                    int partStartVertex = 0;
+                    int partStartIndex = 0;
                     var rigidVertices = new List<RigidVertex>();
                     var skinnedVertices = new List<SkinnedVertex>();
                     var indices = new List<ushort>();
@@ -604,14 +604,30 @@ namespace TagTool.Commands.RenderModels
                         if (suffixMatch.Success && suffixMatch.Groups[1].Value.Contains("%"))
                             preventBackfaceCulling = true;
 
-                        builder.BeginPart(materialIndex, partStartIndex, (ushort)meshIndices.Length, (ushort)part.VertexCount);
-                        builder.DefineSubPart(partStartIndex, (ushort)meshIndices.Length, (ushort)part.VertexCount);
-                        if (preventBackfaceCulling)
-                            builder.SetCurrentPartFlag(Part.PartFlagsNew.PreventBackfaceCulling);
+                            if (partStartIndex > uint.MaxValue || meshIndices.Length > uint.MaxValue)
+                            throw new InvalidOperationException($"sub-part too large: index range {partStartIndex}…{partStartIndex + meshIndices.Length - 1}");
+                        int absoluteFirstIndex = partStartIndex;
+                        builder.BeginPart(materialIndex, absoluteFirstIndex, meshIndices.Length, (ushort)part.VertexCount);
+
+                        int remaining = meshIndices.Length;
+                        int relativeOffset = 0;
+                        while (remaining > 0)
+                        {
+                            int chunk = Math.Min(remaining, ushort.MaxValue);
+                            builder.DefineSubPart(
+                                absoluteFirstIndex,  // absolute first index
+                                (ushort)chunk,
+                                (ushort)part.VertexCount
+                            );
+                            relativeOffset += chunk;
+                            remaining -= chunk;
+                        }
                         builder.EndPart();
 
-                        partStartVertex += (ushort)part.VertexCount;
-                        partStartIndex += (ushort)meshIndices.Length;
+
+
+                        partStartVertex += part.VertexCount;
+                        partStartIndex += meshIndices.Length;
                     }
 
                     if (vertexType == VertexType.Skinned)
