@@ -15,13 +15,11 @@ using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Bson;
 using System.Reflection.Emit;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace TagTool.Commands.ModelAnimationGraphs
 {
     public class AddAnimationCommand : Command
     {
-        private bool RootTransScaleOnly = false;
         private GameCache CacheContext { get; }
         private ModelAnimationGraph Animation { get; set; }
         private ModelAnimationGraph.FrameType AnimationType = ModelAnimationGraph.FrameType.Base;
@@ -71,10 +69,6 @@ namespace TagTool.Commands.ModelAnimationGraphs
                         ScaleFix = true;
                         argStack.Pop();
                         break;
-                    case "notranslation":
-                        RootTransScaleOnly = true;
-                        argStack.Pop();
-                        break;
                     case "keep":
                         KeepExisting = true;
                         argStack.Pop();
@@ -92,20 +86,13 @@ namespace TagTool.Commands.ModelAnimationGraphs
 
             string directoryarg = argStack.Pop();
 
-               if (Directory.Exists(directoryarg))
-                   {
-                var validExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                       {
-                    ".JMA", ".JMM", ".JMO", ".JMR", ".JMW", ".JMZ", ".JMT"
-                           };
-                
-                       foreach (var file in Directory.GetFiles(directoryarg))
-                           {
-                    var ext = Path.GetExtension(file);
-                               if (validExts.Contains(ext))
-                        fileList.Add(new FileInfo(file));
-                           }
-                   }
+            if (Directory.Exists(directoryarg))
+            {
+                foreach (var file in Directory.GetFiles(directoryarg))
+                {
+                    fileList.Add(new FileInfo(file));
+                }
+            }
             else if (File.Exists(directoryarg))
             {
                 fileList.Add(new FileInfo(directoryarg));
@@ -185,9 +172,6 @@ namespace TagTool.Commands.ModelAnimationGraphs
 
                 //process node data in advance of serialization
                 importer.ProcessNodeFrames((GameCacheHaloOnlineBase)CacheContext, Animation, AnimationType, FrameInfoType);
-                if (RootTransScaleOnly)
-                    ApplyRootTransScaleOnly(importer, filepath.FullName);
-
 
                 //Check the nodes to verify that this animation can be imported to this jmad
                 //if (!importer.CompareNodes(Animation.SkeletonNodes, (GameCacheHaloOnlineBase)CacheContext))
@@ -467,47 +451,6 @@ namespace TagTool.Commands.ModelAnimationGraphs
                     set.Overlays.Add(newAction);
             }           
         }
-
-        /// <summary>
-        /// Clears translation & scale flags only on nodes whose names match any keyword
-        /// listed in a nodes.txt file located next to the source animation file.
-        /// </summary>
-        private void ApplyRootTransScaleOnly(AnimationImporter importer, string sourceFilePath)
-        {
-            // Determine path to nodes.txt beside the source animation  
-            var dir = Path.GetDirectoryName(sourceFilePath);
-            var keywordsFile = Path.Combine(dir, "nodes.txt");
-
-            // Read keywords (one per line), lower-cased and trimmed
-            string[] keywords = Array.Empty<string>();
-            if (File.Exists(keywordsFile))
-            {
-                keywords = File.ReadAllLines(keywordsFile)
-                               .Select(l => l.Trim().ToLowerInvariant())
-                               .Where(l => l.Length > 0)
-                               .ToArray();
-            }
-
-            // If we have no keywords, nothing to clear
-            if (keywords.Length == 0)
-                return;
-
-            // For each node, if its name contains any keyword, clear T/S flags
-            for (int i = 0; i < importer.AnimationNodes.Count; i++)
-            {
-                var node = importer.AnimationNodes[i];
-                var name = node.Name.ToLowerInvariant();
-
-                if (keywords.Any(k => name.Contains(k)))
-                {
-                    node.hasAnimatedTranslation = false;
-                    node.hasStaticTranslation = false;
-                    node.hasAnimatedScale = false;
-                    node.hasStaticScale = false;
-                }
-            }
-        }
-
         public void AdjustImportedNodes(AnimationImporter importer)
         {
             //now order imported nodes according to jmad nodes
