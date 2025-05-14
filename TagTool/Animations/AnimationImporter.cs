@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using TagTool.IO;
 using TagTool.Serialization;
@@ -475,7 +475,6 @@ namespace TagTool.Animations
                     {
                         var temprotation = new System.Numerics.Quaternion(frame.Rotation.I, frame.Rotation.J, frame.Rotation.K, frame.Rotation.W);
                         var tempbase = new System.Numerics.Quaternion(BaseFrame.Rotation.I, BaseFrame.Rotation.J, BaseFrame.Rotation.K, BaseFrame.Rotation.W);
-                        // Compute the relative rotation correctly:
                         var relativeRotation = System.Numerics.Quaternion.Multiply(
                             System.Numerics.Quaternion.Inverse(tempbase),
                             temprotation);

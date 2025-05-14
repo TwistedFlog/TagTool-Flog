@@ -47,11 +47,11 @@ namespace TagTool.Commands.Files
             {
                 pathProvided = true;
 
-                if (!Directory.Exists(args[0])) 
+                if (!Directory.Exists(args[0]))
                 {
                     return new TagToolError(CommandError.ArgInvalid, "Given mapinfo directory does not exist.");
                 }
-                else 
+                else
                 {
                     mapInfoPath = args[0];
                     modInfoPath = Path.Combine(args[0], "ModInfo.json");
@@ -64,17 +64,40 @@ namespace TagTool.Commands.Files
 
             var isExcessionData = File.Exists(modInfoPath);
 
-            using (var cacheStream = Cache.OpenCacheRead()) 
+            using (var cacheStream = Cache.OpenCacheRead())
             {
                 if (Cache is GameCacheHaloOnline)
                 {
-                    // Generate / update the map files
+                    // Process each scenario in the "scnr" group
                     foreach (var scenario in Cache.TagCache.FindAllInGroup("scnr"))
                     {
-                        var name = scenario.Name.Split('\\').Last();
-                        var mapInfoName = $"{name}.mapinfo";
-                        var mapFileName = $"{name}.map";
-                        var targetPath = Path.Combine(Cache.Directory.FullName, mapFileName);
+                        var scenarioName = scenario.Name.Split('\\').Last();
+                        // If the scenario tag is empty (i.e. no valid .scnr exists), remove its map file if present.
+                        if (((CachedTagHaloOnline)scenario).IsEmpty())
+                        {
+                            Console.WriteLine($"Skipping scenario 0x{scenario.Index:X4} \"{scenarioName}\" because no valid .scnr exists.");
+
+                            // Delete any corresponding .map file from the cache directory.
+                            var mapFileName = $"{scenarioName}.map";
+                            var files = Cache.Directory.GetFiles(mapFileName);
+                            foreach (var file in files)
+                            {
+                                try
+                                {
+                                    file.Delete();
+                                    Console.WriteLine($"Deleted map file: {file.FullName}");
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.Error.WriteLine($"Failed to delete map file {file.FullName}: {ex}");
+                                }
+                            }
+                            continue;
+                        }
+
+                        var mapInfoName = $"{scenarioName}.mapinfo";
+                        var mapFileNameValid = $"{scenarioName}.map";
+                        var targetPath = Path.Combine(Cache.Directory.FullName, mapFileNameValid);
 
                         MapFile map;
                         Blf mapInfo = null;
@@ -93,7 +116,7 @@ namespace TagTool.Commands.Files
 
                         try
                         {
-                            var fileInfo = Cache.Directory.GetFiles(mapFileName)[0];
+                            var fileInfo = Cache.Directory.GetFiles(mapFileNameValid)[0];
                             map = new MapFile();
                             using (var stream = fileInfo.Open(FileMode.Open, FileAccess.Read))
                             using (var reader = new EndianReader(stream))
@@ -128,26 +151,33 @@ namespace TagTool.Commands.Files
                         }
 
                         if (mapInfo != null)
-                            Console.WriteLine($"Scenario 0x{scenario.Index:X4} \"{name}\" using map info");
+                            Console.WriteLine($"Scenario 0x{scenario.Index:X4} \"{scenarioName}\" using map info");
                         else
-                            new TagToolWarning($"Scenario 0x{scenario.Index:X4} \"{name}\" NOT using map info");
-
+                            new TagToolWarning($"Scenario 0x{scenario.Index:X4} \"{scenarioName}\" NOT using map info");
                     }
                     Console.WriteLine("Done!");
                     return true;
                 }
                 else if (Cache is GameCacheModPackage modCache)
                 {
+                    // Clear existing mapping collections so that no stale map ids cause index mismatches.
+                    modCache.BaseModPackage.MapFileStreams.Clear();
+                    modCache.BaseModPackage.MapIds.Clear();
+                    modCache.BaseModPackage.MapToCacheMapping.Clear();
+
                     // Generate / update the map files
                     foreach (var scenario in Cache.TagCache.FindAllInGroup("scnr"))
                     {
-                        // ignore maps that are in the base cache unmodified
+                        var scenarioName = scenario.Name.Split('\\').Last();
+                        // Skip scenarios with no valid .scnr.
                         if ((scenario as CachedTagHaloOnline).IsEmpty())
+                        {
+                            Console.WriteLine($"Skipping scenario 0x{scenario.Index:X4} \"{scenarioName}\" because no valid .scnr exists.");
                             continue;
+                        }
 
-                        var name = scenario.Name.Split('\\').Last();
-                        var mapInfoName = $"{name}.mapinfo";
-                        var mapFileName = $"{name}.map";
+                        var mapInfoName = $"{scenarioName}.mapinfo";
+                        var mapFileName = $"{scenarioName}.map";
 
                         MapFile map;
                         Blf mapInfo = null;
@@ -172,28 +202,31 @@ namespace TagTool.Commands.Files
                         map = mapBuilder.Build(scenario, scnr);
 
                         var mapStream = new MemoryStream();
-                        var writer = new EndianWriter(mapStream, leaveOpen: true);
-                        map.Write(writer);
+                        using (var writer = new EndianWriter(mapStream, leaveOpen: true))
+                        {
+                            map.Write(writer);
+                        }
 
                         var header = (CacheFileHeaderGenHaloOnline)map.Header;
                         modCache.AddMapFile(mapStream, header.MapId);
 
                         if (mapInfo != null)
-                            Console.WriteLine($"Scenario 0x{scenario.Index:X4} \"{name}\" using map info");
+                            Console.WriteLine($"Scenario 0x{scenario.Index:X4} \"{scenarioName}\" using map info");
                         else
-                            new TagToolWarning($"Scenario 0x{scenario.Index:X4} \"{name}\" NOT using map info");
+                            new TagToolWarning($"Scenario 0x{scenario.Index:X4} \"{scenarioName}\" NOT using map info");
                     }
                     Console.WriteLine("Done!");
                     return true;
                 }
-                else 
+
+                else
                 {
                     return new TagToolError(CommandError.CacheUnsupported);
                 }
             }
         }
 
-        public Blf GetMapInfo(string mapInfoPath, string mapInfoName) 
+        public Blf GetMapInfo(string mapInfoPath, string mapInfoName)
         {
             var mapInfoDir = new DirectoryInfo(mapInfoPath);
             var files = mapInfoDir.GetFiles(mapInfoName);

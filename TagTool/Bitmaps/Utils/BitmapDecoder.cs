@@ -1581,7 +1581,7 @@ namespace TagTool.Bitmaps
                     throw new NotSupportedException("Unsupported bitmap format.");
             }
         }
-
+        public static int TargetDxnBlockSize { get; set; } = 16; // Default block size
         public static byte[] EncodeBitmap(byte[] bitm, BitmapFormat format, int virtualWidth, int virtualHeight)
         {
             byte[] data;
@@ -1608,9 +1608,16 @@ namespace TagTool.Bitmaps
                     break;
 
                 case BitmapFormat.Dxn:
-                    var dxnCompressor = new SquishLib.Compressor(SquishLib.SquishFlags.kDxn | SquishLib.SquishFlags.kSourceBgra, bitm, virtualWidth, virtualHeight);
-                    data = dxnCompressor.CompressTexture();
-                    break;
+                    {
+                        int blockSize = TargetDxnBlockSize; // This value can now be set externally.
+                        var dxnCompressor = new SquishLib.Compressor(
+                            SquishLib.SquishFlags.kDxn | SquishLib.SquishFlags.kSourceBgra,
+                            bitm, virtualWidth, virtualHeight);
+                        // If SquishLib supports it, set the block size:
+                        // dxnCompressor.BlockSize = blockSize;
+                        data = dxnCompressor.CompressTexture();
+                        break;
+                    }
 
                 case BitmapFormat.Dxt1:
                     var dxt1Compressor = new SquishLib.Compressor(SquishLib.SquishFlags.kDxt1 | SquishLib.SquishFlags.kColourIterativeClusterFit | SquishLib.SquishFlags.kSourceBgra, bitm, virtualWidth, virtualHeight);
