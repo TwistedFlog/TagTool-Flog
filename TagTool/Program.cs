@@ -24,8 +24,6 @@ namespace TagTool.Commands
 
         static void Main(string[] args)
         {
-            CultureInfo.DefaultThreadCurrentCulture = CultureInfo.GetCultureInfo("en-US");
-
             //allow managed dll resolution from Tools directory
             AssemblyLoadContext.Default.Resolving += static (AssemblyLoadContext ctx, AssemblyName name) =>
             {
@@ -67,6 +65,7 @@ namespace TagTool.Commands
                 return IntPtr.Zero;
             };
 
+            CultureInfo.DefaultThreadCurrentCulture = CultureInfo.GetCultureInfo("en-US");
             ConsoleHistory.Initialize();
 
             // If there are extra arguments, use them to automatically execute a command

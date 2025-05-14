@@ -65,16 +65,18 @@ namespace TagTool.Cache
 
         public SectionFileBounds Reports;
 
-        public uint RealtimeChecksum;
+        [TagField(Length = 0x4, Flags = TagFieldFlags.Padding)]
+        public byte[] Padding1;
 
         public FileCreator CreatorName;
 
-        public int ExpectedBaseAddress;
-        public int XdkVersion;
-        public int ContentHashMask;
-
         [TagField(Length = 0x4, Flags = TagFieldFlags.Padding)]
-        public byte[] Padding1;
+        public byte[] Padding2;
+
+        public short Unknown1;
+
+        [TagField(Length = 0xA, Flags = TagFieldFlags.Padding)]
+        public byte[] Padding3;
 
         public ulong SignatureMarker;
 
@@ -102,7 +104,7 @@ namespace TagTool.Cache
 
         [TagField(Length = 0x594, MinVersion = CacheVersion.HaloOnlineED, MaxVersion = CacheVersion.HaloOnline106708, Flags = TagFieldFlags.Padding)]
         [TagField(Length = 0x584, MinVersion = CacheVersion.HaloOnline235640, Flags = TagFieldFlags.Padding)]
-        public byte[] Padding2;
+        public byte[] Padding4;
 
         public Tag FooterSignature;
 
@@ -176,27 +178,36 @@ namespace TagTool.Cache
     [TagStructure(Size = 0x14)]
     public class NetworkRequestHash
     {
-        [TagField(Length = 20)]
-        public byte[] Data;
+        [TagField(Length = 5)]
+        public uint[] Data;
 
         public string GetHash() 
         {
-            return BitConverter.ToString(Data).Replace("-", "");
+            List<string> hashList = new List<string>();
+
+            foreach (var dataPoint in Data)
+            {
+                var hex = uint.Parse(dataPoint.ToString().PadLeft(10, '0')).ToString("X").PadLeft(8, '0');
+
+                hashList.Add(hex);
+            }
+
+            return string.Join("", hashList.ToArray());
         }
 
         public void SetHash(string hashString) 
         {
-            Data = new byte[20];
+            Data = new uint[5];
 
-            var chunkSize = 2;
+            var chunkSize = 8;
 
             var parsedString = hashString.PadLeft(40, '0');
 
-            for (int i = 0; i < 20; i++)
+            for (int i = 0; i < 5; i++)
             {
                 int start = i * chunkSize;
                 int length = Math.Min(chunkSize, parsedString.Length - start);
-                Data[i] = byte.Parse(parsedString.Substring(start, length), NumberStyles.HexNumber);
+                Data[i] = uint.Parse(parsedString.Substring(start, length), NumberStyles.HexNumber);
             }
         }
     }
@@ -232,62 +243,19 @@ namespace TagTool.Cache
     [TagStructure(Size = 0x2980)]
     public class SharedResourceUsage : TagStructure
     {
-        public TagPersistentIdentifier SharedLayoutIdentifier;
-        public ushort SharedLocationCount;
-        public ushort LocalLocationCount;
-        public uint FirstFileOffset;
-        public TagPersistentIdentifier CodecIdentifier;
+        [TagField(Length = 0x2328)]
+        public byte[] Data;
 
-        [TagField(Length = 320)]
-        public LocalResourceLocation[] LocalLocations;
-
-        public byte InsertionPointUsageCount;
-
-        [TagField(Length = 0x3, Flags = TagFieldFlags.Padding)]
-        public byte[] Padding;
+        public int InsertionPointUsageCount;
 
         [TagField(Length = 9)]
         public InsertionPointResourceUsage[] InsertionPointUsages;
 
-        [TagStructure(Size = 0x10)]
-        public class TagPersistentIdentifier : TagStructure 
-        {
-            [TagField(Length = 0x4)]
-            public uint[] Data;
-        }
-
-        [TagStructure(Size = 0x1C)]
-        public class LocalResourceLocation : TagStructure 
-        {
-            // TODO: Add some kind of function to handle this
-            // Flags is 2 bits
-            // FileSize is 30 bits
-            public uint FlagsAndFileSize;
-            public uint MemorySize;
-            public NetworkRequestHash EntireChecksum;
-        }
-
         [TagStructure(Size = 0xB4)]
         public class InsertionPointResourceUsage : TagStructure
         {
-            public byte InitialZoneSetIndex;
-
-            [TagField(Length = 0x3, Flags = TagFieldFlags.Padding)]
-            public byte[] Padding;
-
-            // TODO: Add some kind of dynamic bit vector class
-
-            // 1024 bits
-            [TagField(Length = 0x80)]
-            public byte[] SharedRequiredLocations;
-
-            // 320 bits
-            [TagField(Length = 0x28)]
-            public byte[] LocalRequiredLocations;
-
-            // idk what this could be, something from ODST? - Twister
-            [TagField(Length = 0x8)]
-            public byte[] DataAC;
+            [TagField(Length = 0xB4)]
+            public byte[] Data;
         }
     }
 
