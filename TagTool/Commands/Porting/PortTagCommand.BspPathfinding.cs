@@ -17,7 +17,7 @@ namespace TagTool.Commands.Porting
     {
         private TagResourceReference ConvertStructureBspCacheFileTagResources(ScenarioStructureBsp bsp, StructureBspTagResources bspResources, CachedTag instance)
         {
-            if(BlamCache.Platform == CachePlatform.MCC)
+            if (BlamCache.Platform == CachePlatform.MCC)
                 return ConvertStructureBspCacheFileTagResourcesMCC(bsp);
 
             //
@@ -49,14 +49,14 @@ namespace TagTool.Commands.Porting
                     EdgeToSeams = new TagBlock<EdgeToSeamMapping>(CacheAddressType.Data, bsp.EdgeToSeamEdge),
                     PathfindingData = new TagBlock<ResourcePathfinding>(CacheAddressType.Definition)
                 };
-                foreach(var pathfinding in bsp.PathfindingData)
+                foreach (var pathfinding in bsp.PathfindingData)
                 {
                     resourceDefinition.PathfindingData.Add(PathfindingConverter.CreateResourcePathfindingFromTag(pathfinding));
                 }
                 // convert hints
-                foreach(var pathfindingDatum in resourceDefinition.PathfindingData)
+                foreach (var pathfindingDatum in resourceDefinition.PathfindingData)
                 {
-                    foreach(var hint in pathfindingDatum.PathfindingHints)
+                    foreach (var hint in pathfindingDatum.PathfindingHints)
                     {
                         if (hint.HintType == PathfindingHint.HintTypeValue.JumpLink || hint.HintType == PathfindingHint.HintTypeValue.WallJumpLink)
                         {
@@ -68,7 +68,7 @@ namespace TagTool.Commands.Porting
                     }
                 }
                 // fix surface planes
-                foreach(var surfacePlane in resourceDefinition.SurfacePlanes)
+                foreach (var surfacePlane in resourceDefinition.SurfacePlanes)
                 {
                     surfacePlane.SurfaceToTriangleMappingCount = surfacePlane.SurfaceToTriangleMappingCountOld;
                     surfacePlane.FirstSurfaceToTriangleMappingIndex = surfacePlane.FirstSurfaceToTriangleMappingIndexOld;
@@ -79,13 +79,13 @@ namespace TagTool.Commands.Porting
             // Convert reach instanced geometry instances
             //
 
-            if(BlamCache.Version >= CacheVersion.HaloReach)
+            if (BlamCache.Version >= CacheVersion.HaloReach)
             {
                 bsp.InstancedGeometryInstances = new List<InstancedGeometryInstance>();
                 bsp.InstancedGeometryInstances.AddRange(resourceDefinition.InstancedGeometryInstances);
 
                 // convert instances
-                foreach(var instancedgeo in bsp.InstancedGeometryInstances)
+                foreach (var instancedgeo in bsp.InstancedGeometryInstances)
                 {
                     var definition = bspResources.InstancedGeometry[instancedgeo.DefinitionIndex];
 
@@ -100,7 +100,9 @@ namespace TagTool.Commands.Porting
                         new TagToolWarning("Instanced seam bit vector truncated!");
 
                     instancedgeo.SeamBitVector = new uint[] { instancedgeo.SeamBitVector[0] };
-              
+
+                    instancedgeo.Name = CacheContext.StringTable.GetOrAddString(BlamCache.StringTable.GetString(bsp.InstancedGeometryInstanceNames[bsp.InstancedGeometryInstances.IndexOf(instancedgeo)].Name));
+
                     instancedgeo.PathfindingPolicy = instancedgeo.LightmappingPolicyReach.ConvertLexical<Scenery.PathfindingPolicyValue>();
                     instancedgeo.LightmappingPolicy = instancedgeo.LightmappingPolicyReach.ConvertLexical<InstancedGeometryInstance.InstancedGeometryLightmappingPolicy>();
 
@@ -114,9 +116,9 @@ namespace TagTool.Commands.Porting
                 }
 
                 //convert cluster instanced geometry physics
-                for(var i = 0; i < bsp.Clusters.Count; i++)
+                for (var i = 0; i < bsp.Clusters.Count; i++)
                 {
-                    if(bsp.Clusters[i].InstanceImposterClusterMoppIndex != -1)
+                    if (bsp.Clusters[i].InstanceImposterClusterMoppIndex != -1)
                     {
                         bsp.Clusters[i].InstancedGeometryPhysics = new ScenarioStructureBsp.Cluster.InstancedGeometryPhysicsData
                         {
@@ -150,7 +152,7 @@ namespace TagTool.Commands.Porting
         {
             var resourceDefinition = BlamCache.ResourceCache.GetStructureBspCacheFileTagResources(bsp.PathfindingResource);
 
-            if (resourceDefinition == null) 
+            if (resourceDefinition == null)
             {
                 Console.Error.WriteLine("Pathfinding geometry does not have a valid resource definition, continuing anyway.");
 
