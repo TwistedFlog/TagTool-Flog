@@ -88,7 +88,7 @@ namespace TagTool.Geometry.Utils
             }
             else
             {
-                foreach(var lightmapdata in sLdT.Lightmaps)
+                foreach (var lightmapdata in sLdT.Lightmaps)
                 {
                     if (lightmapdata.BspIndex == StructureBspIndex)
                     {
@@ -97,7 +97,7 @@ namespace TagTool.Geometry.Utils
                     }
                 }
             }
-           
+
             var resourceDefinition = SourceCache.ResourceCache.GetRenderGeometryApiResourceDefinition(Lbsp.Geometry.Resource);
             Lbsp.Geometry.SetResourceBuffers(resourceDefinition, false);
 
@@ -119,7 +119,7 @@ namespace TagTool.Geometry.Utils
             else
                 geoID = StructureBsp.InstancedGeometryInstances[geometryIndex].Name;
 
-            string geoname = SourceCache.StringTable.GetString(geoID).Replace('|','-');
+            string geoname = SourceCache.StringTable.GetString(geoID).Replace('|', '-');
 
             var tagName = $"objects\\{scenarioFolder}\\instanced\\{bspindex}{geometryIndex}_{geoname}";
 
@@ -127,7 +127,7 @@ namespace TagTool.Geometry.Utils
             {
                 tagName = $"objects\\{scenarioFolder}\\clusters\\{bspindex}{geometryIndex}";
             }
-                      
+
             if (desiredTagName != null && desiredTagName != string.Empty)
                 tagName = desiredTagName;
 
@@ -169,7 +169,7 @@ namespace TagTool.Geometry.Utils
                 HasValidCollisions = false;
 
             //if the offset from the origin is >2 units in any dimension, center the object
-            if(centergeometry && (Math.Abs(GeometryOffset.X) >= 2.0f || Math.Abs(GeometryOffset.Y) >= 2.0f || Math.Abs(GeometryOffset.Z) >= 2.0f))
+            if (centergeometry && (Math.Abs(GeometryOffset.X) >= 2.0f || Math.Abs(GeometryOffset.Y) >= 2.0f || Math.Abs(GeometryOffset.Z) >= 2.0f))
             {
                 if (HasValidCollisions)
                 {
@@ -400,7 +400,7 @@ namespace TagTool.Geometry.Utils
             if (!iscluster)
             {
                 //bsp physics
-                if(SourceCache.Version < CacheVersion.HaloReach)
+                if (SourceCache.Version < CacheVersion.HaloReach)
                 {
                     var instancedGeometryInstance = StructureBsp.InstancedGeometryInstances[geometryIndex];
                     var instancedGeometryDef = StructureBspResources.InstancedGeometry[instancedGeometryInstance.DefinitionIndex];
@@ -445,7 +445,7 @@ namespace TagTool.Geometry.Utils
                 {
                     permutation.BspMoppCodes.Add(ConvertData(mopp));
 
-                    var bspPhysics =  new CollisionBspPhysicsDefinition
+                    var bspPhysics = new CollisionBspPhysicsDefinition
                     {
                         GeometryShape = new CollisionGeometryShape()
                         {
@@ -505,11 +505,11 @@ namespace TagTool.Geometry.Utils
             else
                 HasValidCollisions = true;
 
-            if(SourceCache.Version >= CacheVersion.HaloReach && HasValidCollisions == true)
+            if (SourceCache.Version >= CacheVersion.HaloReach && HasValidCollisions == true)
             {
                 new GenerateCollisionBSPCommand(ref collisionModel).Execute(new List<string>());
                 var moppBuilt = (bool)new GenerateBspPhysicsCommand(ref collisionModel).Execute(new List<string>());
-                if(moppBuilt)
+                if (moppBuilt)
                     collisionModel.Regions[0].Permutations[0].BspPhysics[0].GeometryShape.Model = modelTag;
             }
 
@@ -568,7 +568,7 @@ namespace TagTool.Geometry.Utils
             {
                 foreach (var part in mesh.Parts)
                 {
-                    if(part.MaterialIndex != -1 && part.MaterialIndex < StructureBsp.Materials.Count)
+                    if (part.MaterialIndex != -1 && part.MaterialIndex < StructureBsp.Materials.Count)
                     {
                         short newMaterialIndex;
                         if (!materialMapping.TryGetValue(part.MaterialIndex, out newMaterialIndex))
@@ -812,7 +812,7 @@ namespace TagTool.Geometry.Utils
         private static float ComputeRenderModelEnclosingRadius(RenderModel model)
         {
             var compressionInfo = model.Geometry.Compression[0];
-            return Math.Max(compressionInfo.X.Length, 
+            return Math.Max(compressionInfo.X.Length,
                 compressionInfo.Y.Length > compressionInfo.Z.Length ?
                 compressionInfo.Y.Length : compressionInfo.Z.Length) * 2.0f;
         }

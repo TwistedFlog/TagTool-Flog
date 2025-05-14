@@ -57,7 +57,7 @@ namespace TagTool.Commands
                     {
                         handle = NativeLibrary.Load(file);
                     }
-                    catch (Exception) 
+                    catch (Exception)
                     {
                         continue;
                     }
@@ -97,7 +97,7 @@ namespace TagTool.Commands
                 Console.ForegroundColor = ConsoleColor.White;
             }
 
-            start:
+        start:
             // Get the file path from the first argument
             // If no argument is given, load tags.dat
             // legacy from older cache system where only HO caches could be loaded
@@ -110,7 +110,7 @@ namespace TagTool.Commands
                 {
                     args = new string[] { File.ReadLines("autoexec.cmds").First() };
 
-                    args[0] = args[0].EndsWith("tags.dat") ? args[0] : 
+                    args[0] = args[0].EndsWith("tags.dat") ? args[0] :
                         (args[0].EndsWith("\\") ? args[0] += "tags.dat" : args[0] += "\\tags.dat");
                 }
                 catch
@@ -119,7 +119,7 @@ namespace TagTool.Commands
                     new TagToolWarning("Your \"autoexec.cmds\" file contains no lines.");
                 }
             }
-                
+
 
             var fileInfo = new FileInfo((args.Length > 0) ? args[0] : "tags.dat");
             bool defaultCacheIsSet = fileInfo.Exists;
@@ -133,7 +133,7 @@ namespace TagTool.Commands
             {
                 Console.WriteLine("\nEnter the path to a Halo cache file (.map/.dat):");
                 Console.Write("> ");
-				var tagCacheFile = Console.ReadLine();
+                var tagCacheFile = Console.ReadLine();
 
                 switch (tagCacheFile.ToLower())
                 {
@@ -200,8 +200,8 @@ namespace TagTool.Commands
                 goto end;
             }
 
-            
-            if(autoExecFile.Exists)
+
+            if (autoExecFile.Exists)
             {
                 var autoExecLines = File.ReadAllLines(autoExecFile.FullName);
 
@@ -226,7 +226,7 @@ namespace TagTool.Commands
                 commandRunner.RunCommand(line, false);
             }
 
-            end: return;
+        end: return;
         }
 
         public static void ReportElapsed()
