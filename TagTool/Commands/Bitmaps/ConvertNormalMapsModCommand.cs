@@ -150,7 +150,7 @@ namespace TagTool.Commands.Mod
                     {
                         Format = BitmapFormat.Dxt1,
                         Data = combined,
-                        MipMapCount = encodedMips.Count
+                        MipMapCount = encodedMips.Count - 1
                     };
                     newBitmap.UpdateFormat(BitmapFormat.Dxt1);
                     BitmapUtils.SetBitmapImageData(newBitmap, image);
