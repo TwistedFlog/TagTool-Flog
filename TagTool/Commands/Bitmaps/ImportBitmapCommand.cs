@@ -95,6 +95,7 @@ namespace TagTool.Commands.Bitmaps
             // normal-map suffix forces linear
             bool isNormal = imagePath.EndsWith("_zbump.dds", StringComparison.OrdinalIgnoreCase)
                          || imagePath.EndsWith("_normal.dds", StringComparison.OrdinalIgnoreCase)
+                         || imagePath.EndsWith("_normals.dds", StringComparison.OrdinalIgnoreCase)
                          || imagePath.EndsWith("_bump.dds", StringComparison.OrdinalIgnoreCase)
                          || imagePath.EndsWith("_microbump.dds", StringComparison.OrdinalIgnoreCase)
                          || imagePath.EndsWith("_n.dds", StringComparison.OrdinalIgnoreCase);
