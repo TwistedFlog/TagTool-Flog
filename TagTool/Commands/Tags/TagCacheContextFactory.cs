@@ -163,6 +163,7 @@ namespace TagTool.Commands.Tags
 				context.AddCommand(new ApplyModPackageTagsCommand(modCache));
 				context.AddCommand(new AddTagCacheCommand(modCache));
                 context.AddCommand(new RemoveMipMapsModCommand(modCache));
+                context.AddCommand(new ConvertNormalMapsModCommand(modCache));
                 context.AddCommand(new DeleteTagCacheCommand(modCache));
                 context.AddCommand(new AddModFilesCommand(modCache));
                 context.AddCommand(new ListModFilesCommand(modCache));
