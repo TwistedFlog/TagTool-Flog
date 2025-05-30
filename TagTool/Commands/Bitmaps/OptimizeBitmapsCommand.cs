@@ -37,13 +37,11 @@ namespace TagTool.Commands.Mod
 
         public override object Execute(List<string> args)
         {
-            // Feature flags
             bool convA8 = args.Any(a => a.Equals("bitmaps", StringComparison.OrdinalIgnoreCase));
             bool convDxn = args.Any(a => a.Equals("normalmaps", StringComparison.OrdinalIgnoreCase));
             bool trim3 = args.Any(a => a.Equals("cutmips", StringComparison.OrdinalIgnoreCase));
             bool doLight = args.Any(a => a.Equals("lightmaps", StringComparison.OrdinalIgnoreCase));
 
-            // Build skips excluding feature flags
             var flags = new[] { "bitmaps", "normalmaps", "cutmips", "lightmaps" };
             var skips = args
                 .Where(a => !flags.Contains(a.ToLowerInvariant()))
@@ -60,7 +58,6 @@ namespace TagTool.Commands.Mod
                 var name = tag.Name ?? tag.ToString();
                 var lower = name.ToLowerInvariant();
 
-                // skip by user filters, always skip cubemaps
                 if (skips.Any(s => lower.Contains(s)) || lower.Contains("cubemap") ||
                     (lower.Contains("lightmap") && !doLight))
                 {
@@ -94,7 +91,6 @@ namespace TagTool.Commands.Mod
 
                     int levels = img.MipmapCount + 1;
 
-                    // for lightmaps: keep only base
                     if (doLight && isLightTag)
                     {
                         Console.WriteLine($"Lightmap trim for {name}[{i}]");
@@ -181,7 +177,6 @@ namespace TagTool.Commands.Mod
                     }
                     else
                     {
-                        // no conversion, but mips may have been trimmed above
                         if (levels != img.MipmapCount + 1)
                         {
                             Console.WriteLine($"Applying cut-only: {name}[{i}] levels={levels}");
@@ -217,8 +212,6 @@ namespace TagTool.Commands.Mod
                 bmp.InterleavedHardwareTextures.Clear();
                 using (var ws = Cache.OpenCacheReadWrite())
                     Cache.Serialize(ws, tag, bmp);
-
-                // any original refs not in newList are now unreferenced for cleanup
             }
 
             Console.WriteLine("Done optimizing bitmaps.");
