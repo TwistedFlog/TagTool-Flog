@@ -21,14 +21,13 @@ namespace TagTool.Commands.Mod
         public OptimizeBitmapsCommand(GameCache cache)
             : base(true,
                    "OptimizeBitmaps",
-                   "Trims, converts, and unlinks unused bitmap resources.",
-                   "OptimizeBitmaps [skip...] [bitmaps] [normalmaps] [cutmips] [lightmaps]",
-                   "- bitmaps: convert A8 formats to DXT5.\n" +
-                   "- normalmaps: convert DXN normals to DXT1.\n" +
-                   "- cutmips: truncate all chains to 3 mips.\n" +
-                   "- lightmaps: for tags with 'lightmap', keep only base level.\n" +
-                   "- skips: substrings of tags to ignore.\n" +
-                   "- cubemap tags never processed.")
+                   "Trims, converts, and unlinks unused bitmap resources to get as most resource as possible.",
+                   "OptimizeBitmaps [bitmaps] [normalmaps] [lightmaps] [cutmips] [skips...]",
+                   "- bitmaps: convert A8R8G8B8 format to DXT5. (Highly recommended).\n" +
+                   "- normalmaps: convert DXN normals to DXT1 (Recommended, please filter detailed normal maps).\n" +
+                   "- cutmips: truncate all chains to 3 mips (Not recommended in any case).\n" +
+                   "- lightmaps: removes useless mip levels on lightmaps (Highly recommended for ported MCC maps).\n" +
+                   "- skips: just write anything, if a bitmaps contains it, it will be skipped.")
         {
             Cache = cache;
         }
@@ -75,139 +74,139 @@ namespace TagTool.Commands.Mod
                     continue;
                 }
 
-                var original = bmp.HardwareTextures.ToList();
                 var newList = new List<TagResourceReference>();
-
                 bool isLightTag = lower.Contains("lightmap");
 
+                // Loop through each image in the bitmap
                 for (int i = 0; i < bmp.Images.Count; i++)
                 {
-                    var img = bmp.Images[i];
-                    var oldRef = bmp.HardwareTextures[i];
-                    var res = Cache.ResourceCache.GetBitmapTextureInteropResource(oldRef);
-                    var data = res.Texture.Definition.PrimaryResourceData.Data
-                               ?? res.Texture.Definition.SecondaryResourceData.Data
-                               ?? Array.Empty<byte>();
-
-                    int levels = img.MipmapCount + 1;
-
-                    if (doLight && isLightTag)
+                    try
                     {
-                        Console.WriteLine($"Lightmap trim for {name}[{i}]");
-                        levels = 1;
-                    }
-                    else if (trim3)
-                    {
-                        if (levels > 3)
+                        var img = bmp.Images[i];
+                        var oldRef = bmp.HardwareTextures[i];
+                        var res = Cache.ResourceCache.GetBitmapTextureInteropResource(oldRef);
+                        var data = res.Texture.Definition.PrimaryResourceData.Data
+                                   ?? res.Texture.Definition.SecondaryResourceData.Data
+                                   ?? Array.Empty<byte>();
+
+                        int levels = img.MipmapCount + 1;
+                        bool isSmallDetail = img.Width <= 512 && img.Height <= 512;
+
+                        if (doLight && isLightTag)
                         {
-                            Console.WriteLine($"Trimming to 3 mips: {name}[{i}]");
-                            levels = 3;
+                            Console.WriteLine($"Lightmap trim for {name}[{i}]");
+                            levels = 1;
                         }
-                    }
-
-                    bool a8 = img.Format == BitmapFormat.A8R8G8B8;
-                    bool a8y = img.Format == BitmapFormat.A8Y8;
-                    bool dxn = img.Format == BitmapFormat.Dxn;
-
-                    bool doA8 = convA8 && (a8 || a8y) && IsPowerOfTwo(img.Width) && IsPowerOfTwo(img.Height);
-                    bool doDXN = convDxn && dxn;
-
-                    if (doA8 || doDXN)
-                    {
-                        var dst = doDXN ? BitmapFormat.Dxt1 : BitmapFormat.Dxt5;
-                        Console.WriteLine($"Converting {name}[{i}] to {dst}, levels={levels}");
-                        int offset = 0;
-                        var outM = new List<byte[]>();
-
-                        for (int lvl = 0; lvl < levels; lvl++)
+                        else if (trim3)
                         {
-                            int w = Math.Max(1, img.Width >> lvl);
-                            int h = Math.Max(1, img.Height >> lvl);
-
-                            if (dxn && doDXN)
+                            if (!isSmallDetail && levels > 3)
                             {
-                                int sz = ((w + 3) / 4) * ((h + 3) / 4) * 16;
-                                if (offset + sz > data.Length) break;
+                                Console.WriteLine($"Trimming to 3 mips: {name}[{i}]");
+                                levels = 3;
+                            }
+                        }
+
+                        bool a8 = img.Format == BitmapFormat.A8R8G8B8;
+                        bool dxn = img.Format == BitmapFormat.Dxn;
+
+                        bool doA8 = convA8 && a8 && IsPowerOfTwo(img.Width) && IsPowerOfTwo(img.Height);
+                        bool doDXN = convDxn && dxn;
+
+                        if (doA8 || doDXN)
+                        {
+                            // Conversion logic
+                            var dst = doDXN ? BitmapFormat.Dxt1 : BitmapFormat.Dxt5;
+                            Console.WriteLine($"Converting {name}[{i}] to {dst}, levels={levels}");
+                            int offset = 0;
+                            var outM = new List<byte[]>();
+
+                            for (int lvl = 0; lvl < levels; lvl++)
+                            {
+                                int w = Math.Max(1, img.Width >> lvl);
+                                int h = Math.Max(1, img.Height >> lvl);
+
+                                // Ensure we don't go out of bounds
+                                int sz = dxn ? ((w + 3) / 4) * ((h + 3) / 4) * 16 : 4 * w * h;
+                                if (offset + sz > data.Length)
+                                    break;
+
                                 var slice = new byte[sz];
                                 Array.Copy(data, offset, slice, 0, sz);
                                 offset += sz;
-                                var raw = BitmapDecoder.DecodeBitmap(slice, BitmapFormat.Dxn, w, h);
-                                outM.Add(BitmapDecoder.EncodeBitmap(raw, dst, w, h));
-                            }
-                            else if (a8 && doA8)
-                            {
-                                int sz = 4 * w * h;
-                                if (offset + sz > data.Length) break;
-                                var rawPixels = new byte[sz];
-                                Array.Copy(data, offset, rawPixels, 0, sz);
-                                offset += sz;
-                                outM.Add(BitmapDecoder.EncodeBitmap(rawPixels, dst, w, h));
-                            }
-                            else if (a8y && doA8)
-                            {
-                                int sz = 2 * w * h;
-                                if (offset + sz > data.Length) break;
-                                var slice = new byte[sz];
-                                Array.Copy(data, offset, slice, 0, sz);
-                                offset += sz;
-                                var raw = BitmapDecoder.DecodeBitmap(slice, BitmapFormat.A8Y8, w, h);
-                                outM.Add(BitmapDecoder.EncodeBitmap(raw, dst, w, h));
-                            }
-                        }
 
-                        if (outM.Count == 0)
-                        {
-                            Console.WriteLine($"No valid mips, keeping original: {name}[{i}]");
-                            newList.Add(oldRef);
+                                if (dxn)
+                                {
+                                    var raw = BitmapDecoder.DecodeBitmap(slice, BitmapFormat.Dxn, w, h);
+                                    outM.Add(BitmapDecoder.EncodeBitmap(raw, dst, w, h));
+                                }
+                                else
+                                {
+                                    outM.Add(BitmapDecoder.EncodeBitmap(slice, dst, w, h));
+                                }
+                            }
+
+                            if (outM.Count == 0)
+                            {
+                                Console.WriteLine($"No valid mips, keeping original: {name}[{i}]");
+                                newList.Add(oldRef);
+                            }
+                            else
+                            {
+                                var all = outM.SelectMany(b => b).ToArray();
+                                var nb = new BaseBitmap(img)
+                                {
+                                    Format = dst,
+                                    Data = all,
+                                    MipMapCount = outM.Count - 1
+                                };
+                                nb.UpdateFormat(dst);
+                                BitmapUtils.SetBitmapImageData(nb, img);
+                                var nr = BitmapUtils.CreateBitmapTextureInteropResource(nb);
+                                newList.Add(Cache.ResourceCache.CreateBitmapResource(nr));
+                            }
                         }
                         else
                         {
-                            var all = outM.SelectMany(b => b).ToArray();
-                            var nb = new BaseBitmap(img)
+                            // Mip-cutting or keep original
+                            if (!isSmallDetail && levels != img.MipmapCount + 1)
                             {
-                                Format = dst,
-                                Data = all,
-                                MipMapCount = outM.Count - 1
-                            };
-                            nb.UpdateFormat(dst);
-                            BitmapUtils.SetBitmapImageData(nb, img);
-                            var nr = BitmapUtils.CreateBitmapTextureInteropResource(nb);
-                            newList.Add(Cache.ResourceCache.CreateBitmapResource(nr));
+                                Console.WriteLine($"Applying cut-only: {name}[{i}] levels={levels}");
+                                int total = 0;
+                                for (int l = 0; l < levels; l++)
+                                {
+                                    int w = Math.Max(1, img.Width >> l);
+                                    int h = Math.Max(1, img.Height >> l);
+                                    total += (dxn ? 16 * ((w + 3) / 4) * ((h + 3) / 4) : (4 * w * h));
+                                }
+                                var len = Math.Min(total, data.Length);
+                                var cut = new byte[len];
+                                Array.Copy(data, 0, cut, 0, len);
+                                var cb = new BaseBitmap(img)
+                                {
+                                    Format = img.Format,
+                                    Data = cut,
+                                    MipMapCount = levels - 1
+                                };
+                                cb.UpdateFormat(img.Format);
+                                BitmapUtils.SetBitmapImageData(cb, img);
+                                var cr = BitmapUtils.CreateBitmapTextureInteropResource(cb);
+                                newList.Add(Cache.ResourceCache.CreateBitmapResource(cr));
+                            }
+                            else
+                            {
+                                newList.Add(oldRef);
+                            }
                         }
                     }
-                    else
+                    catch (ArgumentOutOfRangeException ex)
                     {
-                        if (levels != img.MipmapCount + 1)
-                        {
-                            Console.WriteLine($"Applying cut-only: {name}[{i}] levels={levels}");
-                            int total = 0;
-                            for (int l = 0; l < levels; l++)
-                            {
-                                int w = Math.Max(1, img.Width >> l);
-                                int h = Math.Max(1, img.Height >> l);
-                                total += (dxn ? 16 * ((w + 3) / 4) * ((h + 3) / 4) : ((a8y ? 2 : 4) * w * h));
-                            }
-                            var len = Math.Min(total, data.Length);
-                            var cut = new byte[len];
-                            Array.Copy(data, 0, cut, 0, len);
-                            var cb = new BaseBitmap(img)
-                            {
-                                Format = img.Format,
-                                Data = cut,
-                                MipMapCount = levels - 1
-                            };
-                            cb.UpdateFormat(img.Format);
-                            BitmapUtils.SetBitmapImageData(cb, img);
-                            var cr = BitmapUtils.CreateBitmapTextureInteropResource(cb);
-                            newList.Add(Cache.ResourceCache.CreateBitmapResource(cr));
-                        }
-                        else
-                        {
-                            newList.Add(oldRef);
-                        }
+                        // Skip this image if indices are out of range
+                        Console.WriteLine($"Skipping image {name}[{i}] due to ArgumentOutOfRange: {ex.Message}");
+                        continue;
                     }
                 }
 
+                // Write back textures
                 bmp.HardwareTextures = newList;
                 bmp.InterleavedHardwareTextures.Clear();
                 using (var ws = Cache.OpenCacheReadWrite())
