@@ -22,12 +22,13 @@ namespace TagTool.Commands.Mod
             : base(true,
                    "OptimizeBitmaps",
                    "Trims, converts, and unlinks unused bitmap resources to get as most resource as possible.",
-                   "OptimizeBitmaps [bitmaps] [normalmaps] [lightmaps] [cutmips] [skips...]",
+                   "OptimizeBitmaps [bitmaps] [normalmaps] [lightmaps] [cutmips] [ccmaps] [skips...]",
                    "- bitmaps: convert A8R8G8B8 format to DXT5. (Highly recommended).\n" +
                    "- normalmaps: convert DXN normals to DXT1 (Recommended, please filter detailed normal maps).\n" +
                    "- cutmips: truncate all chains to 3 mips (Not recommended in any case).\n" +
                    "- lightmaps: removes useless mip levels on lightmaps (Highly recommended for ported MCC maps).\n" +
-                   "- skips: just write anything, if a bitmaps contains it, it will be skipped.")
+                   "- ccmaps: for textures ending with _cc or _color, if they are DXT5 but have no alpha, convert to DXT1.\n" +
+                   "- skips: just write anything; if a bitmaps contains it, it will be skipped.")
         {
             Cache = cache;
         }
@@ -40,8 +41,10 @@ namespace TagTool.Commands.Mod
             bool convDxn = args.Any(a => a.Equals("normalmaps", StringComparison.OrdinalIgnoreCase));
             bool trim3 = args.Any(a => a.Equals("cutmips", StringComparison.OrdinalIgnoreCase));
             bool doLight = args.Any(a => a.Equals("lightmaps", StringComparison.OrdinalIgnoreCase));
+            bool convCC = args.Any(a => a.Equals("ccmaps", StringComparison.OrdinalIgnoreCase));
 
-            var flags = new[] { "bitmaps", "normalmaps", "cutmips", "lightmaps" };
+            // Include "ccmaps" so it does not end up in the skips list
+            var flags = new[] { "bitmaps", "normalmaps", "cutmips", "lightmaps", "ccmaps" };
             var skips = args
                 .Where(a => !flags.Contains(a.ToLowerInvariant()))
                 .Select(a => a.ToLowerInvariant())
@@ -68,6 +71,7 @@ namespace TagTool.Commands.Mod
                 Bitmap bmp;
                 using (var rs = Cache.OpenCacheRead())
                     bmp = Cache.Deserialize(rs, tag) as Bitmap;
+
                 if (bmp == null)
                 {
                     Console.WriteLine($"Skipping non-bitmap: {name}");
@@ -76,6 +80,7 @@ namespace TagTool.Commands.Mod
 
                 var newList = new List<TagResourceReference>();
                 bool isLightTag = lower.Contains("lightmap");
+                bool isCCCandidate = convCC && (lower.EndsWith("_cc") || lower.EndsWith("_color"));
 
                 // Loop through each image in the bitmap
                 for (int i = 0; i < bmp.Images.Count; i++)
@@ -106,18 +111,105 @@ namespace TagTool.Commands.Mod
                             }
                         }
 
-                        bool a8 = img.Format == BitmapFormat.A8R8G8B8;
-                        bool dxn = img.Format == BitmapFormat.Dxn;
+                        BitmapFormat currentFormat = img.Format;
+                        bool a8 = currentFormat == BitmapFormat.A8R8G8B8;
+                        bool dxn = currentFormat == BitmapFormat.Dxn;
+                        bool dxt5 = currentFormat == BitmapFormat.Dxt5;
 
                         bool doA8 = convA8 && a8 && IsPowerOfTwo(img.Width) && IsPowerOfTwo(img.Height);
                         bool doDXN = convDxn && dxn;
 
+                        // ----- Begin CCMaps logic -----
+                        if (isCCCandidate && dxt5)
+                        {
+                            // Compute size of top-level DXT5 block
+                            int w0 = img.Width;
+                            int h0 = img.Height;
+                            int topLevelSize = ((w0 + 3) / 4) * ((h0 + 3) / 4) * 16; // 16 bytes per block for DXT5
+
+                            if (data.Length >= topLevelSize)
+                            {
+                                // Decode the very first mip into raw RGBA to inspect the alpha channel
+                                var topSlice = new byte[topLevelSize];
+                                Array.Copy(data, 0, topSlice, 0, topLevelSize);
+                                byte[] rawRGBA = BitmapDecoder.DecodeBitmap(topSlice, BitmapFormat.Dxt5, w0, h0);
+
+                                bool hasAnyAlpha = false;
+                                for (int px = 3; px < rawRGBA.Length; px += 4)
+                                {
+                                    if (rawRGBA[px] != 0xFF)
+                                    {
+                                        hasAnyAlpha = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!hasAnyAlpha)
+                                {
+                                    // No alpha usage: re-encode ALL levels to DXT1
+                                    Console.WriteLine($"CCMap has no alpha, converting to DXT1: {name}[{i}] levels={levels}");
+                                    int offset = 0;
+                                    var outM = new List<byte[]>();
+
+                                    for (int lvl = 0; lvl < levels; lvl++)
+                                    {
+                                        int w = Math.Max(1, img.Width >> lvl);
+                                        int h = Math.Max(1, img.Height >> lvl);
+                                        int blockSize = ((w + 3) / 4) * ((h + 3) / 4) * 16; // still 16 for DXT5 blocks
+
+                                        if (offset + blockSize > data.Length)
+                                            break;
+
+                                        // Decode this mip from DXT5 to raw RGBA
+                                        var sliceDxt5 = new byte[blockSize];
+                                        Array.Copy(data, offset, sliceDxt5, 0, blockSize);
+                                        byte[] rawMip = BitmapDecoder.DecodeBitmap(sliceDxt5, BitmapFormat.Dxt5, w, h);
+
+                                        // Re-encode to DXT1
+                                        outM.Add(BitmapDecoder.EncodeBitmap(rawMip, BitmapFormat.Dxt1, w, h));
+
+                                        offset += blockSize;
+                                    }
+
+                                    if (outM.Count > 0)
+                                    {
+                                        var all = outM.SelectMany(b => b).ToArray();
+                                        var nb = new BaseBitmap(img)
+                                        {
+                                            Format = BitmapFormat.Dxt1,
+                                            Data = all,
+                                            MipMapCount = outM.Count - 1
+                                        };
+                                        nb.UpdateFormat(BitmapFormat.Dxt1);
+                                        BitmapUtils.SetBitmapImageData(nb, img);
+                                        var nr = BitmapUtils.CreateBitmapTextureInteropResource(nb);
+                                        newList.Add(Cache.ResourceCache.CreateBitmapResource(nr));
+                                    }
+                                    else
+                                    {
+                                        // Fallback: if something went wrong, keep original
+                                        Console.WriteLine($"[Warning] No valid mips to re-encode, keeping original: {name}[{i}]");
+                                        newList.Add(oldRef);
+                                    }
+
+                                    // Move to next image
+                                    continue;
+                                }
+                                // If it does have alpha, we fall back and do nothing special for CCMaps
+                            }
+                            else
+                            {
+                                Console.WriteLine($"[Warning] Data length too small to inspect alpha: {name}[{i}]");
+                            }
+                        }
+                        // ----- End CCMaps logic -----
+
+                        // If not handled by CCMaps, proceed with existing logic
                         if (doA8 || doDXN)
                         {
-                            // Conversion logic
                             var dst = doDXN ? BitmapFormat.Dxt1 : BitmapFormat.Dxt5;
                             Console.WriteLine($"Converting {name}[{i}] to {dst}, levels={levels}");
-                            int offset = 0;
+                            int offsetConv = 0;
                             var outM = new List<byte[]>();
 
                             for (int lvl = 0; lvl < levels; lvl++)
@@ -125,14 +217,15 @@ namespace TagTool.Commands.Mod
                                 int w = Math.Max(1, img.Width >> lvl);
                                 int h = Math.Max(1, img.Height >> lvl);
 
-                                // Ensure we don't go out of bounds
-                                int sz = dxn ? ((w + 3) / 4) * ((h + 3) / 4) * 16 : 4 * w * h;
-                                if (offset + sz > data.Length)
+                                int sz = dxn
+                                    ? ((w + 3) / 4) * ((h + 3) / 4) * 16
+                                    : 4 * w * h;
+                                if (offsetConv + sz > data.Length)
                                     break;
 
                                 var slice = new byte[sz];
-                                Array.Copy(data, offset, slice, 0, sz);
-                                offset += sz;
+                                Array.Copy(data, offsetConv, slice, 0, sz);
+                                offsetConv += sz;
 
                                 if (dxn)
                                 {
