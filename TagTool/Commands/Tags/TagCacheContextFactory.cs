@@ -1,6 +1,10 @@
 ﻿using TagTool.Cache;
-using TagTool.Commands.Editing;
+using TagTool.Cache.HaloOnline;
+using TagTool.Cache.Monolithic;
+using TagTool.Commands.Bitmaps;
+using TagTool.Commands.CollisionModels;
 using TagTool.Commands.Common;
+using TagTool.Commands.ConvertCache;
 using TagTool.Commands.Definitions;
 using TagTool.Commands.Files;
 using TagTool.Commands.Strings;
@@ -162,6 +166,7 @@ namespace TagTool.Commands.Tags
 				context.AddCommand(new ApplyModPackageTagsCommand(modCache));
 				context.AddCommand(new AddTagCacheCommand(modCache));
                 context.AddCommand(new DeleteTagCacheCommand(modCache));
+                context.AddCommand(new OptimizeBitmapsCommand(modCache));
                 context.AddCommand(new AddModFilesCommand(modCache));
                 context.AddCommand(new ListModFilesCommand(modCache));
                 context.AddCommand(new DeleteModFilesCommand(modCache));
