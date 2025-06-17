@@ -152,12 +152,25 @@ namespace TagTool.Commands.Bitmaps
 
                     // choose target format
                     BitmapFormat dstFmt;
-                    if (conversionArg != null)
-                        dstFmt = conversionArg == "dxn" ? BitmapFormat.Dxn : BitmapFormat.Dxt1;
-                    else if (isNormal && srcFmt == BitmapFormat.Dxt5)
-                        dstFmt = BitmapFormat.Dxn;
-                    else
+                        if (conversionArg != null)
+                            {
+                                // explicit override: DXT1 or DXN
+                        dstFmt = (conversionArg == "dxn")
+                                    ? BitmapFormat.Dxn
+                                    : BitmapFormat.Dxt1;
+                            }
+                        else if (isNormal)
+                            {
+                                // only native DXT1 stays DXT1; all other normal sources → DXN
+                        dstFmt = (srcFmt == BitmapFormat.Dxt1)
+                                    ? BitmapFormat.Dxt1
+                                    : BitmapFormat.Dxn;
+                            }
+                        else
+                            {
+                                // non‐normals: leave them exactly as they were
                         dstFmt = srcFmt;
+                            }
 
                     // decode top mip
                     int blockSz = (srcFmt == BitmapFormat.Dxt1 ? 8 : 16);
