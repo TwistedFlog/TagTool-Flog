@@ -26,7 +26,7 @@ namespace TagTool.Commands.Bitmaps
                    "Imports an image from a DDS file.",
                    "ImportBitmap <image index> <dds file> [curve] [conversion] [mipCount|-1]",
                    "The image index must be in hexadecimal.\n" +
-                   "Optional curve (linear, sRGB, gamma2, xRGB), conversion (DXT1, DXN), and mip count (0–16).\n" +
+                   "Optional curve (linear, sRGB, gamma2, xRGB), conversion (DXT1, DXT5, DXN), and mip count (0–16).\n" +
                    "If no mipCount is provided, uses the DDS's own mips.\n" +
                    "If mipCount = -1, matches the original tag mip counts.")
         {
@@ -83,6 +83,7 @@ namespace TagTool.Commands.Bitmaps
                         case "gamma2": curve = BitmapImageCurve.Gamma2; break;
                         case "xrgb": curve = BitmapImageCurve.xRGB; break;
                         case "dxt1":
+                        case "dxt5":
                         case "dxn":
                             conversionArg = a; break;
                         default:
@@ -146,31 +147,38 @@ namespace TagTool.Commands.Bitmaps
                         0x31545844 => BitmapFormat.Dxt1,
                         0x33545844 => BitmapFormat.Dxt3,
                         0x35545844 => BitmapFormat.Dxt5,
-                        0 => BitmapFormat.A8R8G8B8,   // treat FourCC==0 as linear BGRA32
+                        0 => BitmapFormat.A8R8G8B8,
                         _ => throw new Exception("Unsupported DDS format: " + fourcc)
                     };
 
                     // choose target format
                     BitmapFormat dstFmt;
-                        if (conversionArg != null)
-                            {
-                                // explicit override: DXT1 or DXN
-                        dstFmt = (conversionArg == "dxn")
-                                    ? BitmapFormat.Dxn
-                                    : BitmapFormat.Dxt1;
-                            }
-                        else if (isNormal)
-                            {
-                                // only native DXT1 stays DXT1; all other normal sources → DXN
-                        dstFmt = (srcFmt == BitmapFormat.Dxt1)
-                                    ? BitmapFormat.Dxt1
-                                    : BitmapFormat.Dxn;
-                            }
-                        else
-                            {
-                                // non‐normals: leave them exactly as they were
+                    if (conversionArg != null)
+                    {
+                        // explicit override: DXT1, DXT5 or DXN
+                        dstFmt = conversionArg switch
+                        {
+                            "dxn" => BitmapFormat.Dxn,
+                            "dxt5" => BitmapFormat.Dxt5,
+                            _ => BitmapFormat.Dxt1
+                        };
+                    }
+                    else if (isNormal)
+                    {
+                        // normal-map suffix handling:
+                        dstFmt = srcFmt switch
+                        {
+                            BitmapFormat.Dxt5 => BitmapFormat.Dxt5,
+                            BitmapFormat.Dxt3 or BitmapFormat.Dxt1 => BitmapFormat.Dxt1,
+                            BitmapFormat.A8R8G8B8 => BitmapFormat.Dxn,
+                            _ => srcFmt
+                        };
+                    }
+                    else
+                    {
+                        // non‐normals: leave them exactly as they were
                         dstFmt = srcFmt;
-                            }
+                    }
 
                     // decode top mip
                     int blockSz = (srcFmt == BitmapFormat.Dxt1 ? 8 : 16);
